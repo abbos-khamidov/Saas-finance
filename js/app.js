@@ -11,8 +11,21 @@ import {
     onSnapshot,
     Timestamp
 } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
-import { FinancialInsights } from './insights.js';
-import { UserSettings } from './user-settings.js';
+
+// Lazy load modules only when authenticated
+let FinancialInsights = null;
+let UserSettings = null;
+
+async function loadModules() {
+    if (!FinancialInsights) {
+        const insightsModule = await import('./insights.js');
+        FinancialInsights = insightsModule.FinancialInsights;
+    }
+    if (!UserSettings) {
+        const settingsModule = await import('./user-settings.js');
+        UserSettings = settingsModule.UserSettings;
+    }
+}
 
 // DOM Elements
 const expenseForm = document.getElementById('expenseForm');
@@ -56,32 +69,58 @@ let currentTransactionType = 'expense';
 let userSettings = null;
 let userSettingsManager = null;
 
-// Auth State Observer
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        currentUser = user;
-        userEmailEl.textContent = user.email;
-        console.log('User authenticated:', user.email);
+// Auth State Observer - Fast redirect for unauthenticated users
+let authChecked = false;
 
-        // Check onboarding (only on index page)
-        if (window.location.pathname.includes('index.html') || window.location.pathname === '/') {
+onAuthStateChanged(auth, async (user) => {
+    if (authChecked) return; // Prevent multiple redirects
+    
+    if (!user) {
+        // Fast redirect for unauthenticated users - don't wait for modules
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/auth.html' && !currentPath.includes('auth.html')) {
+            authChecked = true;
+            window.location.replace('/auth.html');
+        }
+        return;
+    }
+    
+    authChecked = true;
+    
+    // Load modules only after authentication confirmed
+    await loadModules();
+    
+    currentUser = user;
+    if (userEmailEl) {
+        userEmailEl.textContent = user.email;
+    }
+    console.log('User authenticated:', user.email);
+
+    // Check onboarding (only on index page)
+    if (window.location.pathname.includes('index.html') || window.location.pathname === '/' || window.location.pathname === '') {
+        try {
             userSettingsManager = new UserSettings(user.uid);
             const hasOnboarding = await userSettingsManager.hasCompletedOnboarding();
             
             if (!hasOnboarding) {
-                window.location.href = 'onboarding.html';
+                window.location.href = '/onboarding.html';
                 return;
             }
 
             // Load user settings
             await loadUserSettings();
+        } catch (error) {
+            console.error('Error loading user settings:', error);
         }
-        
-        // Load user's transactions
-        loadTransactions();
-    } else {
-        console.log('User not authenticated, redirecting to login...');
-        window.location.href = 'auth.html';
+    }
+    
+    // Load user's transactions
+    loadTransactions();
+}, (error) => {
+    console.error('Auth error:', error);
+    // On auth error, redirect to auth page
+    if (window.location.pathname !== '/auth.html' && !window.location.pathname.includes('auth.html')) {
+        window.location.replace('/auth.html');
     }
 });
 
@@ -467,7 +506,7 @@ logoutBtn.addEventListener('click', async () => {
 
 // Update insights
 function updateInsights() {
-    if (!userSettings || !userSettingsManager) return;
+    if (!userSettings || !userSettingsManager || !FinancialInsights) return;
     
     const insights = new FinancialInsights(allTransactions, userSettings);
     const allInsights = insights.getAllInsights(userSettings.budgets || {});
@@ -688,6 +727,7 @@ function updateBudgets() {
     
     budgetsSection.style.display = 'block';
     
+    if (!FinancialInsights) return;
     const insights = new FinancialInsights(allTransactions, userSettings);
     const overspending = insights.getCategoryOverspending(budgets);
     const overspendingMap = {};
