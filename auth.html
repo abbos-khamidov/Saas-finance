@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход | Учёт Расходов</title>
+    <meta name="description" content="Войдите в свой аккаунт для управления расходами">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1 class="auth-title">💰 Учёт Расходов</h1>
+                <p class="auth-subtitle">Контролируйте свои финансы</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login" id="loginTab">
+                    Вход
+                </button>
+                <button class="auth-tab" data-tab="register" id="registerTab">
+                    Регистрация
+                </button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" class="auth-form active">
+                <div class="form-group">
+                    <label for="loginEmail" class="form-label">Email</label>
+                    <input type="email" id="loginEmail" class="form-input" placeholder="your@email.com" required
+                        autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword" class="form-label">Пароль</label>
+                    <input type="password" id="loginPassword" class="form-input" placeholder="••••••••" required
+                        autocomplete="current-password" minlength="6">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">
+                    Войти
+                </button>
+
+                <div id="loginError" class="error-message"></div>
+            </form>
+
+            <!-- Register Form -->
+            <form id="registerForm" class="auth-form">
+                <div class="form-group">
+                    <label for="registerEmail" class="form-label">Email</label>
+                    <input type="email" id="registerEmail" class="form-input" placeholder="your@email.com" required
+                        autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="registerPassword" class="form-label">Пароль</label>
+                    <input type="password" id="registerPassword" class="form-input" placeholder="••••••••" required
+                        autocomplete="new-password" minlength="6">
+                    <small class="form-hint">Минимум 6 символов</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="registerPasswordConfirm" class="form-label">Подтвердите пароль</label>
+                    <input type="password" id="registerPasswordConfirm" class="form-input" placeholder="••••••••"
+                        required autocomplete="new-password" minlength="6">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">
+                    Зарегистрироваться
+                </button>
+
+                <div id="registerError" class="error-message"></div>
+                <div id="registerSuccess" class="success-message"></div>
+            </form>
+
+            <div class="auth-footer">
+                <p>Бесплатное приложение для учёта расходов</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/auth.js"></script>
+</body>
+
+</html>

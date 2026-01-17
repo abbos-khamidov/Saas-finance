@@ -1,0 +1,26 @@
+# Git Ignore File
+
+# Firebase config with real credentials
+js/firebase-config.js
+
+# Environment files
+.env
+.env.local
+
+# Node modules (if using npm in future)
+node_modules/
+
+# Build files
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
