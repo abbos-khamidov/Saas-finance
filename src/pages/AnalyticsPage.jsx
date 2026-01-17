@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../services/authService';
 import getDataService from '../services/dataService';
+import Footer from '../components/Footer';
 
 export default function AnalyticsPage() {
   const { user, logout } = useAuth();
@@ -135,6 +136,8 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 }

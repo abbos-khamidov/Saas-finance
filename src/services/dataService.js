@@ -77,6 +77,25 @@ class DataService {
     const settings = this.getUserSettings();
     return settings.onboardingCompleted === true;
   }
+
+  // Subscription management
+  updateSubscription(tier) {
+    const settings = this.getUserSettings();
+    settings.subscription = tier;
+    return this.saveUserSettings(settings);
+  }
+
+  isPro() {
+    const settings = this.getUserSettings();
+    return settings.subscription === 'pro';
+  }
+
+  // Budget management
+  updateBudgets(budgets) {
+    const settings = this.getUserSettings();
+    settings.budgets = budgets;
+    return this.saveUserSettings(settings);
+  }
 }
 
 // Singleton instance
