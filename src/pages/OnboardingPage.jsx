@@ -27,7 +27,6 @@ export default function OnboardingPage() {
         financialGoal
       });
 
-      // Show welcome screen briefly
       navigate('/');
     } catch (error) {
       alert('Ошибка при сохранении данных: ' + error.message);
@@ -98,9 +97,6 @@ export default function OnboardingPage() {
       </div>
 
       <Footer />
-    </div>
-  );
-}
     </div>
   );
 }
