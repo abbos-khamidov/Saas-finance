@@ -130,18 +130,23 @@ export default function AnalyticsPage() {
   // Prepare data for charts
   const chartData = useMemo(() => {
     const now = new Date();
-    const daysToShow = period === 'week' ? 7 : period === 'month' ? 30 : Math.min(30, transactions.length || 30);
+    const daysToShow = period === 'week' ? 7 : period === 'month' ? 30 : Math.min(30, (transactions || []).length || 30);
     
     // Группировка по датам
     const expensesByDate = {};
     const incomesByDate = {};
     
-    transactions.forEach(t => {
-      const date = new Date(t.date || t.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-      if (t.type === 'expense') {
-        expensesByDate[date] = (expensesByDate[date] || 0) + (t.amount || 0);
-      } else {
-        incomesByDate[date] = (incomesByDate[date] || 0) + (t.amount || 0);
+    (transactions || []).forEach(t => {
+      if (!t || !(t.date || t.created_at)) return;
+      try {
+        const date = new Date(t.date || t.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+        if (t.type === 'expense') {
+          expensesByDate[date] = (expensesByDate[date] || 0) + (t.amount || 0);
+        } else if (t.type === 'income') {
+          incomesByDate[date] = (incomesByDate[date] || 0) + (t.amount || 0);
+        }
+      } catch {
+        // Skip invalid dates
       }
     });
 
