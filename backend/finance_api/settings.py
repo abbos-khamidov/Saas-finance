@@ -47,7 +47,7 @@ ROOT_URLCONF = 'finance_api.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],  # Добавляем папку templates для React index.html
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

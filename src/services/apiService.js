@@ -1,5 +1,21 @@
 // API Service - работа с Django бэкендом
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+// На продакшене (Railway) используем тот же домен для API
+const getApiBaseUrl = () => {
+  // Если указана переменная окружения, используем её
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // Если мы на Railway (production), используем тот же домен
+  if (window.location.hostname.includes('railway.app') || window.location.hostname.includes('up.railway.app')) {
+    return `${window.location.origin}/api`;
+  }
+  
+  // Для локальной разработки
+  return 'http://localhost:8000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiService {
   constructor() {
