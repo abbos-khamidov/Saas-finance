@@ -526,6 +526,7 @@ export default function DashboardPage() {
             Добавить {type === 'expense' ? 'расход' : 'доход'}
           </button>
         </form>
+        </div>
 
           {/* Transactions List - Grouped by Month/Day */}
           <div className="form-section" style={{ marginTop: '20px' }}>
