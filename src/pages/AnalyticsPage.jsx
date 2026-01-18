@@ -40,7 +40,9 @@ export default function AnalyticsPage() {
   const [userSettings, setUserSettings] = useState(null);
   const [period, setPeriod] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
+  // Загрузка данных при монтировании и при изменении периода
   useEffect(() => {
     loadData();
   }, [period]);
@@ -75,8 +77,10 @@ export default function AnalyticsPage() {
 
       const settings = await dataService.getUserSettings();
       setUserSettings(settings);
+      setDataLoaded(true);
     } catch (error) {
       console.error('Error loading data:', error);
+      setDataLoaded(true); // Помечаем что загрузка завершена даже при ошибке
     } finally {
       setLoading(false);
     }
@@ -310,14 +314,14 @@ export default function AnalyticsPage() {
       </header>
 
       {/* Loading State */}
-      {loading && (
+      {loading && !dataLoaded && (
         <div className="loading-container">
           <div className="loading-spinner"></div>
           <p>Загрузка аналитики...</p>
         </div>
       )}
 
-      {!loading && (
+      {(!loading || dataLoaded) && (
         <>
           {/* Period Filter */}
           <div className="form-section">
@@ -415,82 +419,151 @@ export default function AnalyticsPage() {
 
               <div className="charts-grid">
                 {/* Expenses by Date Line Chart */}
-                <div className="chart-card wow">
-                  <div className="chart-header">
-                    <div className="chart-icon">📉</div>
-                    <div>
-                      <h3 className="chart-title">Расходы по датам</h3>
-                      <p className="chart-description">
-                        Динамика ваших расходов во времени. Видно, в какие дни траты больше или меньше.
-                      </p>
+                {expenses.length > 0 ? (
+                  <div className="chart-card wow">
+                    <div className="chart-header">
+                      <div className="chart-icon">📉</div>
+                      <div>
+                        <h3 className="chart-title">Расходы по датам</h3>
+                        <p className="chart-description">
+                          Динамика ваших расходов во времени. Видно, в какие дни траты больше или меньше.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="chart-container">
+                      <Line data={expensesChartData} options={lineChartOptions} />
                     </div>
                   </div>
-                  <div className="chart-container">
-                    <Line data={expensesChartData} options={lineChartOptions} />
+                ) : (
+                  <div className="chart-card wow">
+                    <div className="chart-header">
+                      <div className="chart-icon">📉</div>
+                      <div>
+                        <h3 className="chart-title">Расходы по датам</h3>
+                        <p className="chart-description">
+                          Для отображения графика расходов необходимо добавить хотя бы одну транзакцию с типом "Расход".
+                        </p>
+                      </div>
+                    </div>
+                    <div className="chart-container" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <p>Недостаточно данных для отображения графика расходов</p>
+                      <p style={{ marginTop: '10px', fontSize: '0.9em' }}>Добавьте расходы на главной странице</p>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Income by Date Line Chart */}
-                <div className="chart-card wow">
-                  <div className="chart-header">
-                    <div className="chart-icon">📈</div>
-                    <div>
-                      <h3 className="chart-title">Доходы по датам</h3>
-                      <p className="chart-description">
-                        Как изменяются ваши доходы. Отслеживайте регулярность поступлений.
-                      </p>
+                {incomes.length > 0 ? (
+                  <div className="chart-card wow">
+                    <div className="chart-header">
+                      <div className="chart-icon">📈</div>
+                      <div>
+                        <h3 className="chart-title">Доходы по датам</h3>
+                        <p className="chart-description">
+                          Как изменяются ваши доходы. Отслеживайте регулярность поступлений.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="chart-container">
+                      <Line data={incomeChartData} options={lineChartOptions} />
                     </div>
                   </div>
-                  <div className="chart-container">
-                    <Line data={incomeChartData} options={lineChartOptions} />
+                ) : (
+                  <div className="chart-card wow">
+                    <div className="chart-header">
+                      <div className="chart-icon">📈</div>
+                      <div>
+                        <h3 className="chart-title">Доходы по датам</h3>
+                        <p className="chart-description">
+                          Для отображения графика доходов необходимо добавить хотя бы одну транзакцию с типом "Доход".
+                        </p>
+                      </div>
+                    </div>
+                    <div className="chart-container" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <p>Недостаточно данных для отображения графика доходов</p>
+                      <p style={{ marginTop: '10px', fontSize: '0.9em' }}>Добавьте доходы на главной странице</p>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Category Doughnut Chart */}
-                <div className="chart-card wow">
-                  <div className="chart-header">
-                    <div className="chart-icon">🥧</div>
-                    <div>
-                      <h3 className="chart-title">Расходы по категориям</h3>
-                      <p className="chart-description">
-                        Распределение трат по категориям. Какая категория забирает больше всего?
-                      </p>
+                {expenses.length > 0 && categoryLabels.length > 0 ? (
+                  <div className="chart-card wow">
+                    <div className="chart-header">
+                      <div className="chart-icon">🥧</div>
+                      <div>
+                        <h3 className="chart-title">Расходы по категориям</h3>
+                        <p className="chart-description">
+                          Распределение трат по категориям. Какая категория забирает больше всего?
+                        </p>
+                      </div>
+                    </div>
+                    <div className="chart-container">
+                      <Doughnut data={categoryChartData} options={categoryChartOptions} />
                     </div>
                   </div>
-                  <div className="chart-container">
-                    {categoryLabels.length > 0 ? (
-                      <Doughnut data={categoryChartData} options={categoryChartOptions} />
-                    ) : (
-                      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        Нет данных для отображения
+                ) : (
+                  <div className="chart-card wow">
+                    <div className="chart-header">
+                      <div className="chart-icon">🥧</div>
+                      <div>
+                        <h3 className="chart-title">Расходы по категориям</h3>
+                        <p className="chart-description">
+                          Для отображения диаграммы по категориям необходимо добавить расходы с указанными категориями.
+                        </p>
                       </div>
-                    )}
+                    </div>
+                    <div className="chart-container" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <p>Недостаточно данных для отображения диаграммы</p>
+                      <p style={{ marginTop: '10px', fontSize: '0.9em' }}>Добавьте расходы с категориями на главной странице</p>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Comparison Bar Chart */}
-                <div className="chart-card wow full-width">
-                  <div className="chart-header">
-                    <div className="chart-icon">⚖</div>
-                    <div>
-                      <h3 className="chart-title">Доходы vs Расходы</h3>
-                      <p className="chart-description">
-                        Сравнение доходов и расходов. Зелёные столбцы — доходы, красные — расходы.
-                      </p>
+                {(expenses.length > 0 || incomes.length > 0) ? (
+                  <div className="chart-card wow full-width">
+                    <div className="chart-header">
+                      <div className="chart-icon">⚖</div>
+                      <div>
+                        <h3 className="chart-title">Доходы vs Расходы</h3>
+                        <p className="chart-description">
+                          Сравнение доходов и расходов. Зелёные столбцы — доходы, красные — расходы.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="chart-container">
+                      <Bar data={comparisonChartData} options={lineChartOptions} />
                     </div>
                   </div>
-                  <div className="chart-container">
-                    <Bar data={comparisonChartData} options={lineChartOptions} />
+                ) : (
+                  <div className="chart-card wow full-width">
+                    <div className="chart-header">
+                      <div className="chart-icon">⚖</div>
+                      <div>
+                        <h3 className="chart-title">Доходы vs Расходы</h3>
+                        <p className="chart-description">
+                          Для сравнения доходов и расходов необходимо добавить транзакции обоих типов.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="chart-container" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <p>Недостаточно данных для сравнения</p>
+                      <p style={{ marginTop: '10px', fontSize: '0.9em' }}>Добавьте доходы и расходы на главной странице</p>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           ) : (
-            <div className="empty-state">
+            <div className="empty-state wow">
               <div className="empty-icon">📊</div>
-              <h3 className="empty-title">Нет данных для графиков</h3>
+              <h3 className="empty-title">Нет данных для аналитики</h3>
               <p className="empty-description">
-                Добавьте транзакции на главной странице, чтобы увидеть аналитику и графики.
+                Для отображения графиков и аналитики необходимо добавить транзакции (доходы или расходы) на главной странице.
+              </p>
+              <p className="empty-description" style={{ marginTop: '10px', fontSize: '0.9em', color: 'var(--text-secondary)' }}>
+                После добавления транзакций здесь появятся графики, диаграммы и ключевые инсайты.
               </p>
             </div>
           )}
