@@ -26,7 +26,9 @@ export default function DashboardPage() {
   const [categoryName, setCategoryName] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
   const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' или 'savings'
-  const [expandedMonths, setExpandedMonths] = useState(new Set()); // Управление раскрытием месяцев
+  const [currentPage, setCurrentPage] = useState(1); // Пагинация
+  const [transactionsFilter, setTransactionsFilter] = useState('all'); // Фильтр: 'all', 'day', 'week', 'month'
+  const transactionsPerPage = 10; // Транзакций на странице
   
   // Дефолтные категории для обратной совместимости
   const defaultCategories = ['Продукты', 'Транспорт', 'Развлечения', 'Здоровье', 'Коммунальные услуги', 'Одежда', 'Другое'];
@@ -67,11 +69,13 @@ export default function DashboardPage() {
       const userCategories = await dataService.getCategories();
       // Объединяем пользовательские категории с дефолтными
       const allCategories = [...defaultCategories];
-      userCategories.forEach(cat => {
-        if (!allCategories.includes(cat.name)) {
-          allCategories.push(cat.name);
-        }
-      });
+      if (Array.isArray(userCategories)) {
+        userCategories.forEach(cat => {
+          if (cat && cat.name && !allCategories.includes(cat.name)) {
+            allCategories.push(cat.name);
+          }
+        });
+      }
       setCategories(allCategories);
     } catch (error) {
       console.error('Error loading categories:', error);
@@ -147,112 +151,62 @@ export default function DashboardPage() {
     return new Intl.NumberFormat('ru-RU').format(val) + ' сум';
   };
 
-  // Группировка транзакций по месяцам и дням
-  const groupedTransactions = useMemo(() => {
-    const grouped = {};
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  // Фильтрация и пагинация транзакций
+  const filteredAndPaginatedTransactions = useMemo(() => {
+    let filtered = (transactions || []).filter(t => t && (t.date || t.created_at));
     
-    (transactions || []).forEach(transaction => {
-      if (!transaction || !(transaction.date || transaction.created_at)) return;
-      try {
-        const date = new Date(transaction.date || transaction.created_at);
-        if (isNaN(date.getTime())) return; // Invalid date
-        
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        const dayKey = `${monthKey}-${String(date.getDate()).padStart(2, '0')}`;
-        
-        if (!grouped[monthKey]) {
-          grouped[monthKey] = {
-            monthKey,
-            monthName: date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }),
-            isCurrent: monthKey === currentMonthKey,
-            days: {},
-            income: 0,
-            expense: 0,
-          };
-        }
-        
-        if (!grouped[monthKey].days[dayKey]) {
-          grouped[monthKey].days[dayKey] = {
-            dayKey,
-            dayName: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }),
-            date: date,
-            transactions: [],
-            income: 0,
-            expense: 0,
-          };
-        }
-        
-        grouped[monthKey].days[dayKey].transactions.push(transaction);
-        
-        if (transaction.type === 'income') {
-          grouped[monthKey].days[dayKey].income += transaction.amount || 0;
-          grouped[monthKey].income += transaction.amount || 0;
-        } else if (transaction.type === 'expense') {
-          grouped[monthKey].days[dayKey].expense += transaction.amount || 0;
-          grouped[monthKey].expense += transaction.amount || 0;
-        }
-      } catch (error) {
-        console.warn('Error processing transaction:', error, transaction);
+    // Применяем фильтр по периоду
+    if (transactionsFilter !== 'all') {
+      const now = new Date();
+      const filterDate = new Date();
+      
+      if (transactionsFilter === 'day') {
+        filterDate.setHours(0, 0, 0, 0);
+      } else if (transactionsFilter === 'week') {
+        filterDate.setDate(filterDate.getDate() - 7);
+      } else if (transactionsFilter === 'month') {
+        filterDate.setMonth(filterDate.getMonth() - 1);
       }
-    });
-
-    // Сортируем дни внутри месяца по дате (новые сверху)
-    Object.keys(grouped).forEach(monthKey => {
-      try {
-        const days = Object.values(grouped[monthKey].days)
-          .filter(day => day && day.date)
-          .sort((a, b) => {
-            try {
-              return b.date - a.date;
-            } catch {
-              return 0;
-            }
-          });
-        grouped[monthKey].daysSorted = days;
-      } catch (error) {
-        console.warn('Error sorting days for month:', monthKey, error);
-        grouped[monthKey].daysSorted = [];
-      }
-    });
-
-    // Сортируем месяцы (новые сверху)
-    try {
-      return Object.values(grouped)
-        .filter(month => month && month.monthKey)
-        .sort((a, b) => {
-          if (a.monthKey > b.monthKey) return -1;
-          if (a.monthKey < b.monthKey) return 1;
-          return 0;
-        });
-    } catch (error) {
-      console.warn('Error sorting months:', error);
-      return [];
+      
+      filtered = filtered.filter(t => {
+        try {
+          const transactionDate = new Date(t.date || t.created_at);
+          return transactionDate >= filterDate;
+        } catch {
+          return false;
+        }
+      });
     }
-  }, [transactions]);
+    
+    // Сортируем по дате (новые сверху)
+    filtered = filtered.sort((a, b) => {
+      try {
+        const aTime = a.created_at || a.timestamp || a.date || 0;
+        const bTime = b.created_at || b.timestamp || b.date || 0;
+        return new Date(bTime) - new Date(aTime);
+      } catch {
+        return 0;
+      }
+    });
+    
+    // Пагинация
+    const startIndex = (currentPage - 1) * transactionsPerPage;
+    const endIndex = startIndex + transactionsPerPage;
+    const paginatedTransactions = filtered.slice(startIndex, endIndex);
+    const totalPages = Math.ceil(filtered.length / transactionsPerPage);
+    
+    return {
+      transactions: paginatedTransactions,
+      total: filtered.length,
+      totalPages,
+      currentPage
+    };
+  }, [transactions, transactionsFilter, currentPage, transactionsPerPage]);
 
-  // Инициализация: раскрываем только текущий месяц
+  // Сброс страницы при изменении фильтра
   useEffect(() => {
-    if (groupedTransactions.length > 0 && expandedMonths.size === 0) {
-      const currentMonth = groupedTransactions.find(m => m.isCurrent);
-      if (currentMonth) {
-        setExpandedMonths(new Set([currentMonth.monthKey]));
-      }
-    }
-  }, [groupedTransactions, expandedMonths]);
-
-  const toggleMonth = (monthKey) => {
-    setExpandedMonths(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(monthKey)) {
-        newSet.delete(monthKey);
-      } else {
-        newSet.add(monthKey);
-      }
-      return newSet;
-    });
-  };
+    setCurrentPage(1);
+  }, [transactionsFilter]);
 
   const expenses = (transactions || []).filter(t => t && t.type === 'expense');
   const incomes = (transactions || []).filter(t => t && t.type === 'income');
@@ -555,141 +509,115 @@ export default function DashboardPage() {
         </form>
         </div>
 
-          {/* Transactions List - Grouped by Month/Day */}
+          {/* Transactions List - Simple List with Pagination */}
           <div className="form-section" style={{ marginTop: '20px' }}>
-            <h2 className="section-title">Транзакции</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h2 className="section-title" style={{ margin: 0 }}>Последние транзакции</h2>
+              <select 
+                value={transactionsFilter}
+                onChange={(e) => setTransactionsFilter(e.target.value)}
+                style={{
+                  padding: '6px 12px',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="all">Все</option>
+                <option value="day">Сегодня</option>
+                <option value="week">Неделя</option>
+                <option value="month">Месяц</option>
+              </select>
+            </div>
             <div className="expenses-list">
-              {!loading && transactions.length === 0 ? (
+              {!loading && filteredAndPaginatedTransactions.total === 0 ? (
                 <div className="empty-state">
                   <div className="empty-icon">📊</div>
                   <h3 className="empty-title">Нет транзакций</h3>
                   <p className="empty-description">
-                    Начните отслеживать свои финансы. Добавьте первую транзакцию выше.
-                  </p>
-                  <p className="empty-hint">
-                    После добавления нескольких записей здесь появятся аналитика и инсайты.
+                    {transactionsFilter !== 'all' 
+                      ? `Нет транзакций за выбранный период.`
+                      : 'Начните отслеживать свои финансы. Добавьте первую транзакцию выше.'}
                   </p>
                 </div>
-              ) : !loading && groupedTransactions && groupedTransactions.length > 0 ? (
-                groupedTransactions.map(month => {
-                  if (!month || !month.monthKey) return null;
-                  const isExpanded = expandedMonths.has(month.monthKey);
-                  const monthBalance = (month.income || 0) - (month.expense || 0);
+              ) : !loading && filteredAndPaginatedTransactions.transactions.length > 0 ? (
+                <>
+                  {filteredAndPaginatedTransactions.transactions.map(transaction => {
+                    if (!transaction) return null;
+                    const transactionDate = new Date(transaction.date || transaction.created_at);
+                    const isToday = new Date().toDateString() === transactionDate.toDateString();
+                    
+                    return (
+                      <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`} style={{ marginBottom: '8px' }}>
+                        <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
+                        <div className="expense-details" style={{ flex: 1 }}>
+                          <div className="expense-category-name">
+                            {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category || 'Другое'}
+                          </div>
+                          <div className="expense-date" style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            {isToday 
+                              ? `Сегодня, ${transactionDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                              : transactionDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+                            }
+                          </div>
+                        </div>
+                        <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
+                          {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount || 0)}
+                        </div>
+                        <button 
+                          onClick={() => deleteTransaction(transaction.id)}
+                          className="btn-delete"
+                          style={{ marginLeft: '10px' }}
+                          title="Удалить"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
                   
-                  return (
-                    <div key={month.monthKey} className="transaction-month-group">
-                      {/* Month Header - Accordion */}
-                      <div 
-                        className="transaction-month-header"
-                        onClick={() => toggleMonth(month.monthKey)}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '15px',
-                          background: 'var(--bg-secondary)',
-                          borderRadius: '8px',
-                          marginBottom: '10px',
-                          cursor: 'pointer',
-                          border: '1px solid var(--border)',
-                          transition: 'all 0.2s ease'
+                  {/* Пагинация */}
+                  {filteredAndPaginatedTransactions.totalPages > 1 && (
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginTop: '20px',
+                      paddingTop: '15px',
+                      borderTop: '1px solid var(--border)'
+                    }}>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={filteredAndPaginatedTransactions.currentPage === 1}
+                        className="btn btn-secondary"
+                        style={{ 
+                          opacity: filteredAndPaginatedTransactions.currentPage === 1 ? 0.5 : 1,
+                          cursor: filteredAndPaginatedTransactions.currentPage === 1 ? 'not-allowed' : 'pointer'
                         }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '1.2rem' }}>{isExpanded ? '▼' : '▶'}</span>
-                          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{month.monthName}</h3>
-                          {month.isCurrent && (
-                            <span style={{ 
-                              fontSize: '0.75rem', 
-                              padding: '2px 8px', 
-                              background: 'var(--primary)',
-                              borderRadius: '12px',
-                              color: 'white'
-                            }}>Текущий</span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '20px', fontSize: '0.9rem' }}>
-                          <span style={{ color: 'var(--success)' }}>
-                            Доходы: {formatAmount(month.income)}
-                          </span>
-                          <span style={{ color: 'var(--danger)' }}>
-                            Расходы: {formatAmount(month.expense)}
-                          </span>
-                          <span style={{ 
-                            color: monthBalance >= 0 ? 'var(--success)' : 'var(--danger)',
-                            fontWeight: 'bold'
-                          }}>
-                            Итого: {formatAmount(monthBalance)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Month Content - Days */}
-                      {isExpanded && month.daysSorted && month.daysSorted.length > 0 && (
-                        <div className="transaction-days-container" style={{ marginBottom: '20px', marginLeft: '20px' }}>
-                          {month.daysSorted.map(day => {
-                            if (!day || !day.dayKey) return null;
-                            return (
-                              <div key={day.dayKey} className="transaction-day-group" style={{ marginBottom: '15px' }}>
-                                <div style={{
-                                  fontSize: '0.9rem',
-                                  color: 'var(--text-secondary)',
-                                  marginBottom: '8px',
-                                  fontWeight: '500'
-                                }}>
-                                  {day.dayName}
-                                </div>
-                                <div className="expenses-list">
-                                  {day.transactions.map(transaction => (
-                                    <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
-                                      <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
-                                      <div className="expense-details">
-                                        <div className="expense-category-name">
-                                          {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category}
-                                        </div>
-                                        <div className="expense-date">
-                                          {new Date(transaction.date || transaction.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                        </div>
-                                      </div>
-                                      <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
-                                        {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount)}
-                                      </div>
-                                      <button 
-                                        onClick={() => deleteTransaction(transaction.id)}
-                                        className="btn-delete"
-                                        style={{ marginLeft: 'auto' }}
-                                        title="Удалить"
-                                      >
-                                        ×
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                                {(day.income > 0 || day.expense > 0) && (
-                                  <div style={{
-                                    fontSize: '0.85rem',
-                                    color: 'var(--text-secondary)',
-                                    marginTop: '8px',
-                                    marginBottom: '10px',
-                                    paddingLeft: '10px',
-                                    borderLeft: '2px solid var(--border)'
-                                  }}>
-                                    <span style={{ color: 'var(--success)', marginRight: '15px' }}>
-                                      +{formatAmount(day.income || 0)}
-                                    </span>
-                                    <span style={{ color: 'var(--danger)' }}>
-                                      −{formatAmount(day.expense || 0)}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                        ← Назад
+                      </button>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                        Страница {filteredAndPaginatedTransactions.currentPage} из {filteredAndPaginatedTransactions.totalPages}
+                        {' '}(всего {filteredAndPaginatedTransactions.total} транзакций)
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(prev => Math.min(filteredAndPaginatedTransactions.totalPages, prev + 1))}
+                        disabled={filteredAndPaginatedTransactions.currentPage === filteredAndPaginatedTransactions.totalPages}
+                        className="btn btn-secondary"
+                        style={{ 
+                          opacity: filteredAndPaginatedTransactions.currentPage === filteredAndPaginatedTransactions.totalPages ? 0.5 : 1,
+                          cursor: filteredAndPaginatedTransactions.currentPage === filteredAndPaginatedTransactions.totalPages ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        Вперед →
+                      </button>
                     </div>
-                  );
-                })
+                  )}
+                </>
               ) : null}
             </div>
           </div>
