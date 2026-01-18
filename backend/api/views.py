@@ -58,10 +58,29 @@ class TransactionViewSet(viewsets.ModelViewSet):
             return Transaction.objects.filter(user_id=user_id)
         return Transaction.objects.none()
 
-    def perform_create(self, serializer):
-        user_id = self.request.data.get('user_id')
-        user = get_object_or_404(User, id=user_id)
+    def create(self, request, *args, **kwargs):
+        """Переопределяем create для лучшей обработки ошибок"""
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': f'User with id {user_id} not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         serializer.save(user=user)
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class UserSettingsViewSet(viewsets.ModelViewSet):

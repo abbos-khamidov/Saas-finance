@@ -21,16 +21,28 @@ class ApiService {
     }
 
     try {
+      console.log('API Request:', url, config.method || 'GET', config.body);
       const response = await fetch(url, config);
-      const data = await response.json();
+      
+      // Проверяем, есть ли тело ответа перед парсингом JSON
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error(`Server returned non-JSON: ${response.status} ${response.statusText}`);
+      }
       
       if (!response.ok) {
-        throw new Error(data.error || data.detail || 'Request failed');
+        console.error('API Error Response:', response.status, data);
+        throw new Error(data.error || data.detail || data.message || `Request failed: ${response.status} ${response.statusText}`);
       }
       
       return data;
     } catch (error) {
-      console.error('API Error:', error);
+      console.error('API Error:', error.message, 'URL:', url);
       throw error;
     }
   }
