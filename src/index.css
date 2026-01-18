@@ -920,30 +920,37 @@ body {
     border-radius: 16px;
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-md);
-    min-height: 300px;
+    min-height: 400px;
     display: flex;
     flex-direction: column;
+    transition: var(--transition);
 }
 
-.chart-card > canvas {
+.chart-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary);
+}
+
+.chart-container {
     flex: 1;
-    min-height: 200px;
+    min-height: 300px;
+    position: relative;
+    margin-top: 16px;
+}
+
+.chart-card > canvas,
+.chart-container canvas {
+    max-height: none !important;
+    height: 100% !important;
+    min-height: 300px !important;
 }
 
 .chart-title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    margin-bottom: 16px;
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 4px;
     color: var(--text-primary);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    opacity: 0.8;
-}
-
-.chart-card canvas {
-    max-height: 250px;
-    min-height: 200px;
-    height: 200px !important;
 }
 
 .category-breakdown {
@@ -2214,15 +2221,20 @@ body {
 /* ==================== Chart Enhancements ==================== */
 
 .chart-icon {
-    font-size: 2rem;
+    font-size: 2.5rem;
     margin-right: 12px;
+    flex-shrink: 0;
 }
 
 .chart-header {
     display: flex;
     align-items: flex-start;
     gap: 16px;
-    margin-bottom: 20px;
+    margin-bottom: 0;
+}
+
+.chart-header > div {
+    flex: 1;
 }
 
 .chart-card.full-width {
@@ -2230,10 +2242,10 @@ body {
 }
 
 .chart-description {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     color: var(--text-secondary);
     line-height: 1.6;
-    margin-top: 4px;
+    margin-top: 8px;
 }
 
 /* ==================== Footer ==================== */
