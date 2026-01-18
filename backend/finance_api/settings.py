@@ -66,13 +66,22 @@ WSGI_APPLICATION = 'finance_api.wsgi.application'
 # Database
 # Railway предоставляет PostgreSQL через переменную DATABASE_URL
 # Если нет DATABASE_URL, используем SQLite для разработки
-import dj_database_url
-DATABASES = {
-    'default': dj_database_url.config(
-        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
-        conn_max_age=600
-    )
-}
+try:
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+            conn_max_age=600
+        )
+    }
+except ImportError:
+    # Если dj_database_url не установлен, используем SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation

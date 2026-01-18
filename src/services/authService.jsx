@@ -42,11 +42,15 @@ export function AuthProvider({ children }) {
   const register = async (email, password) => {
     try {
       const userData = await apiService.register(email, password);
+      if (!userData || !userData.id) {
+        throw new Error('Invalid response from server');
+      }
       localStorage.setItem('finance_user', JSON.stringify(userData));
       setUser(userData);
       return userData;
     } catch (error) {
       // Fallback to localStorage if API unavailable
+      console.warn('API register failed, using localStorage fallback:', error.message);
       const userData = {
         id: Date.now().toString(),
         email,
