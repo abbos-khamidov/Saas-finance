@@ -9,12 +9,14 @@ export default function AnalyticsPage() {
   const dataService = getDataService();
   const [transactions, setTransactions] = useState([]);
   const [period, setPeriod] = useState('all');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadTransactions();
   }, [period]);
 
   const loadTransactions = async () => {
+    setLoading(true);
     try {
       const all = await dataService.getTransactions();
       let filtered = all;
@@ -42,6 +44,8 @@ export default function AnalyticsPage() {
       }));
     } catch (error) {
       console.error('Error loading transactions:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,6 +87,16 @@ export default function AnalyticsPage() {
         </div>
       </header>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Загрузка аналитики...</p>
+        </div>
+      )}
+
+      {!loading && (
+        <>
       <div className="form-section">
         <div className="period-filter">
           <button 
@@ -151,6 +165,8 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       <Footer />
     </div>
