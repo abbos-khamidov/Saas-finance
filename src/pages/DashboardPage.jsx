@@ -12,12 +12,14 @@ export default function DashboardPage() {
   
   const [transactions, setTransactions] = useState([]);
   const [userSettings, setUserSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [category, setCategory] = useState('');
   const [type, setType] = useState('expense');
   const [description, setDescription] = useState('');
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showFormulaExplanation, setShowFormulaExplanation] = useState(false);
   
   const categories = ['Продукты', 'Транспорт', 'Развлечения', 'Здоровье', 'Коммунальные услуги', 'Одежда', 'Другое'];
   
@@ -34,6 +36,7 @@ export default function DashboardPage() {
   };
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const data = await dataService.getTransactions();
       setTransactions(data.sort((a, b) => {
@@ -45,6 +48,8 @@ export default function DashboardPage() {
       setUserSettings(settings);
     } catch (error) {
       console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -100,10 +105,12 @@ export default function DashboardPage() {
   }, [transactions, userSettings]);
 
   // Все функции доступны без ограничений Pro
-  const dailyLimit = insights?.dailyLimit || { dailyRemaining: 0, daysRemaining: 0 };
+  const dailyLimit = insights?.dailyLimit || { dailyRemaining: 0, daysRemaining: 0, formula: null };
   const forecast = insights?.forecast || { forecastBalance: 0 };
   const comparison = insights?.comparison || { current: 0, previous: 0, percentage: 0, trend: 'same' };
   const overspending = insights?.overspending || [];
+  const streak = insights?.streak || { days: 0, isActive: false, message: '' };
+  const automaticInsights = insights?.automaticInsights || [];
 
   const progressPercentage = dailyLimit.dailyLimit > 0 
     ? Math.min(100, (dailyLimit.dailyRemaining / dailyLimit.dailyLimit) * 100)
@@ -123,17 +130,47 @@ export default function DashboardPage() {
         </div>
       </nav>
 
-      {/* Hero Insight - Daily Spending Limit */}
-      {userSettings && userSettings.monthlyIncome > 0 && (
+      {/* Hero Insight - Daily Spending Limit - ГЛАВНЫЙ БЛОК ПРИНЯТИЯ РЕШЕНИЙ */}
+      {!loading && userSettings && userSettings.monthlyIncome > 0 && (
         <div className="hero-insight wow">
           <div className="hero-insight-content">
             <div className="hero-icon">💰</div>
             <div className="hero-label">Можно потратить сегодня</div>
             <div className="hero-value">{formatAmount(dailyLimit.dailyRemaining)}</div>
-            <div className="hero-subtitle">Осталось дней в месяце: <span>{dailyLimit.daysRemaining}</span></div>
+            <div className="hero-subtitle">
+              Осталось дней в месяце: <span>{dailyLimit.daysRemaining}</span>
+              {dailyLimit.formula && (
+                <button 
+                  className="hero-formula-btn"
+                  onClick={() => setShowFormulaExplanation(!showFormulaExplanation)}
+                  title="Как это рассчитывается?"
+                >
+                  ℹ️
+                </button>
+              )}
+            </div>
+            {showFormulaExplanation && dailyLimit.formula && (
+              <div className="hero-formula-explanation">
+                <p><strong>Формула расчета:</strong></p>
+                <p>Доход ({formatAmount(dailyLimit.formula.monthlyIncome)}) − Обязательные расходы ({formatAmount(dailyLimit.formula.fixedExpenses)}) = {formatAmount(dailyLimit.formula.availableForMonth)}</p>
+                <p>{formatAmount(dailyLimit.formula.availableForMonth)} ÷ {dailyLimit.formula.daysInMonth} дней = {formatAmount(dailyLimit.formula.dailyLimit)}/день</p>
+                <p>Осталось {formatAmount(dailyLimit.formula.remainingForMonth)} ÷ {dailyLimit.daysRemaining} дней = <strong>{formatAmount(dailyLimit.dailyRemaining)}/день</strong></p>
+                {dailyLimit.dailyRemaining < dailyLimit.dailyLimit * 0.3 && (
+                  <p className="formula-warning">⚠️ Осталось менее 30% от дневного лимита. Будьте осторожны с тратами!</p>
+                )}
+              </div>
+            )}
           </div>
           <div className={`hero-progress ${progressPercentage > 50 ? 'good' : progressPercentage > 25 ? 'warning' : 'danger'}`} 
                style={{ width: `${progressPercentage}%` }}></div>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Загрузка данных...</p>
         </div>
       )}
 
@@ -197,8 +234,39 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Financial Discipline - Streaks */}
+      {!loading && streak.isActive && (
+        <div className="streak-card wow">
+          <div className="streak-content">
+            <div className="streak-icon">🔥</div>
+            <div className="streak-info">
+              <div className="streak-label">Дней без перерасхода</div>
+              <div className="streak-value">{streak.days} дней</div>
+              <div className="streak-message">{streak.message}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Automatic Financial Insights - ВЫВОДЫ, НЕ ГРАФИКИ */}
+      {!loading && automaticInsights.length > 0 && (
+        <div className="insights-section">
+          <h2 className="section-title">Важные выводы</h2>
+          <div className="insights-list">
+            {automaticInsights.map((insight, idx) => (
+              <div key={idx} className={`insight-card insight-${insight.type} wow`}>
+                <div className="insight-header">
+                  <span className="insight-title">{insight.title}</span>
+                </div>
+                <div className="insight-message">{insight.message}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Overspending Alerts */}
-      {overspending.length > 0 && (
+      {!loading && overspending.length > 0 && (
         <div className="alerts-container">
           {overspending.map((item, idx) => (
             <div key={idx} className={`alert ${item.status === 'over' ? 'alert-danger' : 'alert-warning'}`}>
@@ -290,11 +358,18 @@ export default function DashboardPage() {
       <div className="form-section">
         <h2 className="section-title">Транзакции</h2>
         <div className="expenses-list">
-          {transactions.length === 0 ? (
-            <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>
-              Нет транзакций. Добавьте первую запись выше.
-            </p>
-          ) : (
+          {!loading && transactions.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📊</div>
+              <h3 className="empty-title">Нет транзакций</h3>
+              <p className="empty-description">
+                Начните отслеживать свои финансы. Добавьте первую транзакцию выше.
+              </p>
+              <p className="empty-hint">
+                После добавления нескольких записей здесь появятся аналитика и инсайты.
+              </p>
+            </div>
+          ) : !loading ? (
             transactions.map(transaction => (
               <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
                 <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
@@ -317,7 +392,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             ))
-          )}
+          ) : null}
         </div>
       </div>
 

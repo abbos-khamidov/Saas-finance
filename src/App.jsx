@@ -14,14 +14,18 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
   
   useEffect(() => {
-    if (!loading && !user) {
-      navigate('/auth');
-    } else if (user && location.pathname !== '/onboarding') {
-      const dataService = getDataService();
-      if (!dataService.hasCompletedOnboarding()) {
-        navigate('/onboarding');
+    const checkAuth = async () => {
+      if (!loading && !user) {
+        navigate('/auth');
+      } else if (user && location.pathname !== '/onboarding') {
+        const dataService = getDataService();
+        const completed = await dataService.hasCompletedOnboarding();
+        if (!completed) {
+          navigate('/onboarding');
+        }
       }
-    }
+    };
+    checkAuth();
   }, [user, loading, navigate, location]);
   
   if (loading) {
