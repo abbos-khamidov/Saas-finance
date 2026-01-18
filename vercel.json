@@ -5,21 +5,10 @@
     "framework": "vite",
     "outputDirectory": "dist",
 
-    "rewrites": [{
-            "source": "/",
+    "rewrites": [
+        {
+            "source": "/(.*)",
             "destination": "/index.html"
-        },
-        {
-            "source": "/analytics",
-            "destination": "/analytics.html"
-        },
-        {
-            "source": "/auth",
-            "destination": "/auth.html"
-        },
-        {
-            "source": "/onboarding",
-            "destination": "/onboarding.html"
         }
     ],
 
