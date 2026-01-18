@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [categoryName, setCategoryName] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
   const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' или 'savings'
+  const [expandedMonths, setExpandedMonths] = useState(new Set()); // Управление раскрытием месяцев
   
   // Дефолтные категории для обратной совместимости
   const defaultCategories = ['Продукты', 'Транспорт', 'Развлечения', 'Здоровье', 'Коммунальные услуги', 'Одежда', 'Другое'];
@@ -446,7 +447,7 @@ export default function DashboardPage() {
         </form>
       </div>
 
-          {/* Transactions List */}
+          {/* Transactions List - Grouped by Month/Day */}
           <div className="form-section">
             <h2 className="section-title">Транзакции</h2>
             <div className="expenses-list">
@@ -462,28 +463,121 @@ export default function DashboardPage() {
                   </p>
                 </div>
               ) : !loading ? (
-                transactions.map(transaction => (
-                  <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
-                    <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
-                    <div className="expense-details">
-                      <div className="expense-category-name">
-                        {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category}
+                groupedTransactions.map(month => {
+                  const isExpanded = expandedMonths.has(month.monthKey);
+                  const monthBalance = month.income - month.expense;
+                  
+                  return (
+                    <div key={month.monthKey} className="transaction-month-group">
+                      {/* Month Header - Accordion */}
+                      <div 
+                        className="transaction-month-header"
+                        onClick={() => toggleMonth(month.monthKey)}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '15px',
+                          background: 'var(--bg-secondary)',
+                          borderRadius: '8px',
+                          marginBottom: '10px',
+                          cursor: 'pointer',
+                          border: '1px solid var(--border)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '1.2rem' }}>{isExpanded ? '▼' : '▶'}</span>
+                          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>{month.monthName}</h3>
+                          {month.isCurrent && (
+                            <span style={{ 
+                              fontSize: '0.75rem', 
+                              padding: '2px 8px', 
+                              background: 'var(--primary)',
+                              borderRadius: '12px',
+                              color: 'white'
+                            }}>Текущий</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '20px', fontSize: '0.9rem' }}>
+                          <span style={{ color: 'var(--success)' }}>
+                            Доходы: {formatAmount(month.income)}
+                          </span>
+                          <span style={{ color: 'var(--danger)' }}>
+                            Расходы: {formatAmount(month.expense)}
+                          </span>
+                          <span style={{ 
+                            color: monthBalance >= 0 ? 'var(--success)' : 'var(--danger)',
+                            fontWeight: 'bold'
+                          }}>
+                            Итого: {formatAmount(monthBalance)}
+                          </span>
+                        </div>
                       </div>
-                      <div className="expense-date">{new Date(transaction.date).toLocaleDateString('ru-RU')}</div>
+
+                      {/* Month Content - Days */}
+                      {isExpanded && (
+                        <div className="transaction-days-container" style={{ marginBottom: '20px', marginLeft: '20px' }}>
+                          {month.daysSorted.map(day => (
+                            <div key={day.dayKey} className="transaction-day-group" style={{ marginBottom: '15px' }}>
+                              <div style={{
+                                fontSize: '0.9rem',
+                                color: 'var(--text-secondary)',
+                                marginBottom: '8px',
+                                fontWeight: '500'
+                              }}>
+                                {day.dayName}
+                              </div>
+                              <div className="expenses-list">
+                                {day.transactions.map(transaction => (
+                                  <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
+                                    <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
+                                    <div className="expense-details">
+                                      <div className="expense-category-name">
+                                        {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category}
+                                      </div>
+                                      <div className="expense-date">
+                                        {new Date(transaction.date || transaction.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                      </div>
+                                    </div>
+                                    <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
+                                      {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount)}
+                                    </div>
+                                    <button 
+                                      onClick={() => deleteTransaction(transaction.id)}
+                                      className="btn-delete"
+                                      style={{ marginLeft: 'auto' }}
+                                      title="Удалить"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              {(day.income > 0 || day.expense > 0) && (
+                                <div style={{
+                                  fontSize: '0.85rem',
+                                  color: 'var(--text-secondary)',
+                                  marginTop: '8px',
+                                  marginBottom: '10px',
+                                  paddingLeft: '10px',
+                                  borderLeft: '2px solid var(--border)'
+                                }}>
+                                  <span style={{ color: 'var(--success)', marginRight: '15px' }}>
+                                    +{formatAmount(day.income)}
+                                  </span>
+                                  <span style={{ color: 'var(--danger)' }}>
+                                    −{formatAmount(day.expense)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
-                      {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount)}
-                    </div>
-                    <button 
-                      onClick={() => deleteTransaction(transaction.id)}
-                      className="btn-delete"
-                      style={{ marginLeft: 'auto' }}
-                      title="Удалить"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               ) : null}
             </div>
           </div>
