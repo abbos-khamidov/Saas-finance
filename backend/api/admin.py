@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, UserSettings, Transaction, FinancialGoal, Insight
+from .models import User, UserSettings, Transaction, FinancialGoal, Insight, Category
 
 
 @admin.register(User)
@@ -26,6 +26,13 @@ class FinancialGoalAdmin(admin.ModelAdmin):
     list_display = ['user', 'title', 'target_amount', 'current_amount', 'status']
     list_filter = ['status']
     search_fields = ['title', 'description']
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ['user', 'name', 'is_default', 'created_at']
+    list_filter = ['is_default']
+    search_fields = ['name']
 
 
 @admin.register(Insight)

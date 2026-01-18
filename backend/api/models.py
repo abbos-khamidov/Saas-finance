@@ -53,6 +53,23 @@ class Transaction(models.Model):
         ]
 
 
+class Category(models.Model):
+    """Пользовательская категория расходов"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='categories')
+    name = models.CharField(max_length=100)
+    is_default = models.BooleanField(default=False)  # Системные категории
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'categories'
+        unique_together = ['user', 'name']
+        ordering = ['is_default', 'name']
+
+    def __str__(self):
+        return self.name
+
+
 class FinancialGoal(models.Model):
     """Финансовая цель"""
     STATUS_CHOICES = [
@@ -68,6 +85,8 @@ class FinancialGoal(models.Model):
     current_amount = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     deadline = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    # Связь с категориями: JSON поле для хранения {category_id: amount_to_save}
+    category_savings = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

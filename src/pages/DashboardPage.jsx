@@ -4,6 +4,7 @@ import { useAuth } from '../services/authService';
 import getDataService from '../services/dataService';
 import { FinancialInsights } from '../utils/insights';
 import Footer from '../components/Footer';
+import SavingsCalculator from '../components/SavingsCalculator';
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -20,12 +21,19 @@ export default function DashboardPage() {
   const [description, setDescription] = useState('');
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showFormulaExplanation, setShowFormulaExplanation] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [categoryName, setCategoryName] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null);
+  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' или 'savings'
   
-  const categories = ['Продукты', 'Транспорт', 'Развлечения', 'Здоровье', 'Коммунальные услуги', 'Одежда', 'Другое'];
+  // Дефолтные категории для обратной совместимости
+  const defaultCategories = ['Продукты', 'Транспорт', 'Развлечения', 'Здоровье', 'Коммунальные услуги', 'Одежда', 'Другое'];
   
   useEffect(() => {
     checkOnboarding();
     loadData();
+    loadCategories();
   }, []);
 
   const checkOnboarding = async () => {
@@ -50,6 +58,53 @@ export default function DashboardPage() {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const userCategories = await dataService.getCategories();
+      // Объединяем пользовательские категории с дефолтными
+      const allCategories = [...defaultCategories];
+      userCategories.forEach(cat => {
+        if (!allCategories.includes(cat.name)) {
+          allCategories.push(cat.name);
+        }
+      });
+      setCategories(allCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      setCategories(defaultCategories);
+    }
+  };
+
+  const handleSaveCategory = async (e) => {
+    e.preventDefault();
+    if (!categoryName.trim()) return;
+
+    try {
+      await dataService.saveCategory({
+        id: editingCategory?.id,
+        name: categoryName.trim(),
+      });
+      await loadCategories();
+      setShowCategoryModal(false);
+      setCategoryName('');
+      setEditingCategory(null);
+    } catch (error) {
+      console.error('Error saving category:', error);
+      alert('Ошибка при сохранении категории');
+    }
+  };
+
+  const handleDeleteCategory = async (id) => {
+    if (!confirm('Удалить эту категорию?')) return;
+    try {
+      await dataService.deleteCategory(id);
+      await loadCategories();
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      alert('Ошибка при удалении категории');
     }
   };
 
@@ -278,53 +333,90 @@ export default function DashboardPage() {
       )}
 
 
-      {/* Transaction Form */}
+      {/* Main Tabs: Transactions / Savings */}
       <div className="form-section">
-        <div className="transaction-tabs">
+        <div className="transaction-tabs" style={{ marginBottom: '20px' }}>
           <button 
-            className={`transaction-tab ${type === 'expense' ? 'active' : ''}`}
-            onClick={() => setType('expense')}
+            className={`transaction-tab ${activeTab === 'transactions' ? 'active' : ''}`}
+            onClick={() => setActiveTab('transactions')}
           >
-            Расход
+            Транзакции
           </button>
           <button 
-            className={`transaction-tab ${type === 'income' ? 'active' : ''}`}
-            onClick={() => setType('income')}
+            className={`transaction-tab ${activeTab === 'savings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('savings')}
           >
-            Доход
+            Откладывать
           </button>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="expense-form">
-          <div className="form-group">
-            <label className="form-label">Сумма (сум)</label>
-            <input 
-              type="number" 
-              className="form-input" 
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              required 
-              step="1000" 
-              min="0"
-            />
+      {/* Transactions Tab */}
+      {activeTab === 'transactions' && (
+        <div className="form-section">
+          <div className="transaction-tabs">
+            <button 
+              className={`transaction-tab ${type === 'expense' ? 'active' : ''}`}
+              onClick={() => setType('expense')}
+            >
+              Расход
+            </button>
+            <button 
+              className={`transaction-tab ${type === 'income' ? 'active' : ''}`}
+              onClick={() => setType('income')}
+            >
+              Доход
+            </button>
           </div>
-          
-          {type === 'expense' ? (
+
+          <form onSubmit={handleSubmit} className="expense-form">
             <div className="form-group">
-              <label className="form-label">Категория</label>
-              <select 
+              <label className="form-label">Сумма (сум)</label>
+              <input 
+                type="number" 
                 className="form-input" 
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                required
-              >
-                <option value="">Выберите категорию</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required 
+                step="1000" 
+                min="0"
+              />
             </div>
-          ) : (
+            
+            {type === 'expense' ? (
+              <div className="form-group">
+                <label className="form-label">
+                  Категория
+                  <button 
+                    type="button"
+                    onClick={() => setShowCategoryModal(true)}
+                    style={{ 
+                      marginLeft: '10px', 
+                      padding: '4px 8px', 
+                      fontSize: '0.75rem',
+                      background: 'var(--primary)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✏️ Управление
+                  </button>
+                </label>
+                <select 
+                  className="form-input" 
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  required
+                >
+                  <option value="">Выберите категорию</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
             <div className="form-group">
               <label className="form-label">Описание</label>
               <input 
@@ -354,47 +446,103 @@ export default function DashboardPage() {
         </form>
       </div>
 
-      {/* Transactions List */}
-      <div className="form-section">
-        <h2 className="section-title">Транзакции</h2>
-        <div className="expenses-list">
-          {!loading && transactions.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📊</div>
-              <h3 className="empty-title">Нет транзакций</h3>
-              <p className="empty-description">
-                Начните отслеживать свои финансы. Добавьте первую транзакцию выше.
-              </p>
-              <p className="empty-hint">
-                После добавления нескольких записей здесь появятся аналитика и инсайты.
-              </p>
-            </div>
-          ) : !loading ? (
-            transactions.map(transaction => (
-              <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
-                <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
-                <div className="expense-details">
-                  <div className="expense-category-name">
-                    {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category}
+          {/* Transactions List */}
+          <div className="form-section">
+            <h2 className="section-title">Транзакции</h2>
+            <div className="expenses-list">
+              {!loading && transactions.length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">📊</div>
+                  <h3 className="empty-title">Нет транзакций</h3>
+                  <p className="empty-description">
+                    Начните отслеживать свои финансы. Добавьте первую транзакцию выше.
+                  </p>
+                  <p className="empty-hint">
+                    После добавления нескольких записей здесь появятся аналитика и инсайты.
+                  </p>
+                </div>
+              ) : !loading ? (
+                transactions.map(transaction => (
+                  <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
+                    <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
+                    <div className="expense-details">
+                      <div className="expense-category-name">
+                        {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category}
+                      </div>
+                      <div className="expense-date">{new Date(transaction.date).toLocaleDateString('ru-RU')}</div>
+                    </div>
+                    <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
+                      {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount)}
+                    </div>
+                    <button 
+                      onClick={() => deleteTransaction(transaction.id)}
+                      className="btn-delete"
+                      style={{ marginLeft: 'auto' }}
+                      title="Удалить"
+                    >
+                      ×
+                    </button>
                   </div>
-                  <div className="expense-date">{new Date(transaction.date).toLocaleDateString('ru-RU')}</div>
-                </div>
-                <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
-                  {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount)}
-                </div>
-                <button 
-                  onClick={() => deleteTransaction(transaction.id)}
-                  className="btn-delete"
-                  style={{ marginLeft: 'auto' }}
-                  title="Удалить"
-                >
-                  ×
-                </button>
+                ))
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        {/* Savings Tab */}
+        {activeTab === 'savings' && (
+          <div className="form-section">
+            <h2 className="section-title">Откладывать деньги</h2>
+            {!userSettings || !userSettings.monthlyIncome ? (
+              <div className="empty-state">
+                <div className="empty-icon">💰</div>
+                <p>Настройте доход в настройках, чтобы увидеть рекомендации по откладыванию</p>
               </div>
-            ))
-          ) : null}
+            ) : (
+              <SavingsCalculator 
+                transactions={transactions}
+                userSettings={userSettings}
+                formatAmount={formatAmount}
+                dataService={dataService}
+              />
+            )}
+          </div>
+        )}
+
+      {/* Category Management Modal */}
+      {showCategoryModal && (
+        <div className="modal" style={{ display: 'flex' }} onClick={(e) => e.target.className === 'modal' && setShowCategoryModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Управление категориями</h2>
+              <button onClick={() => { setShowCategoryModal(false); setEditingCategory(null); setCategoryName(''); }} className="modal-close">×</button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={handleSaveCategory}>
+                <div className="form-group">
+                  <label className="form-label">Название категории</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                    placeholder="Например: Подписки"
+                    required
+                  />
+                </div>
+                <div className="modal-footer">
+                  <button type="button" onClick={() => { setShowCategoryModal(false); setEditingCategory(null); setCategoryName(''); }} className="btn btn-secondary">
+                    Отмена
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingCategory ? 'Сохранить' : 'Добавить'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       <Footer />
     </div>

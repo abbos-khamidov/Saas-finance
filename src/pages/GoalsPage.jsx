@@ -17,10 +17,35 @@ export default function GoalsPage() {
     target_amount: '',
     deadline: '',
   });
+  const [categories, setCategories] = useState([]);
+  const [goalCalculations, setGoalCalculations] = useState({});
+  const [expandedGoal, setExpandedGoal] = useState(null);
+  const [categorySavings, setCategorySavings] = useState({}); // {goalId: {categoryId: amount}}
 
   useEffect(() => {
     loadGoals();
+    loadCategories();
   }, []);
+
+  const loadCategories = async () => {
+    try {
+      const data = await dataService.getCategories();
+      setCategories(data || []);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const loadGoalCalculations = async (goalId) => {
+    try {
+      const calc = await dataService.getGoalCalculations(goalId);
+      if (calc) {
+        setGoalCalculations(prev => ({ ...prev, [goalId]: calc }));
+      }
+    } catch (error) {
+      console.error('Error loading goal calculations:', error);
+    }
+  };
 
   const loadGoals = async () => {
     try {
@@ -181,6 +206,124 @@ export default function GoalsPage() {
                        goal.status === 'cancelled' ? '❌ Отменена' : '🔄 Активна'}
                     </span>
                   </div>
+                  
+                  {/* Кнопка для раскрытия деталей */}
+                  {goal.status === 'active' && (
+                    <button 
+                      onClick={() => {
+                        if (expandedGoal === goal.id) {
+                          setExpandedGoal(null);
+                        } else {
+                          setExpandedGoal(goal.id);
+                          loadGoalCalculations(goal.id);
+                        }
+                      }}
+                      className="btn btn-secondary"
+                      style={{ marginTop: '15px', width: '100%', fontSize: '0.9rem' }}
+                    >
+                      {expandedGoal === goal.id ? 'Скрыть детали' : 'Показать детали'}
+                    </button>
+                  )}
+
+                  {/* Расширенная секция с категориями и расчетами */}
+                  {expandedGoal === goal.id && goal.status === 'active' && (
+                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
+                      {/* Расчеты */}
+                      {goalCalculations[goal.id] && (
+                        <div style={{ marginBottom: '20px' }}>
+                          <h4 style={{ fontSize: '1rem', marginBottom: '10px' }}>Расчеты достижения цели</h4>
+                          <div className="insight-card" style={{ marginBottom: '10px' }}>
+                            <div style={{ fontSize: '0.9rem' }}>
+                              <div><strong>Текущая скорость накопления:</strong> {formatAmount(goalCalculations[goal.id].current_savings_rate)}/мес</div>
+                              {goalCalculations[goal.id].total_savings_rate > 0 && (
+                                <div style={{ marginTop: '5px' }}>
+                                  <strong>С учетом экономии:</strong> {formatAmount(goalCalculations[goal.id].total_savings_rate)}/мес
+                                </div>
+                              )}
+                              {goalCalculations[goal.id].projected_date && (
+                                <div style={{ marginTop: '5px', color: goalCalculations[goal.id].deadline_status === 'late' ? 'var(--danger)' : 'var(--success)' }}>
+                                  <strong>Прогнозируемая дата:</strong> {new Date(goalCalculations[goal.id].projected_date).toLocaleDateString('ru-RU')}
+                                  {goalCalculations[goal.id].deadline_status === 'late' && ' ⚠️ Позже срока'}
+                                </div>
+                              )}
+                              {goalCalculations[goal.id].recommended_daily && (
+                                <div style={{ marginTop: '10px', padding: '10px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
+                                  <strong>Рекомендуется откладывать:</strong>
+                                  <div style={{ marginTop: '5px' }}>
+                                    {formatAmount(goalCalculations[goal.id].recommended_daily)}/день или {formatAmount(goalCalculations[goal.id].recommended_monthly)}/мес
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Категории, влияющие на цель */}
+                      <div>
+                        <h4 style={{ fontSize: '1rem', marginBottom: '10px' }}>Категории, влияющие на цель</h4>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                          Укажите, сколько хотите экономить в каждой категории для достижения цели
+                        </p>
+                        {categories.length > 0 ? (
+                          <div>
+                            {categories.map(cat => {
+                              const savings = categorySavings[goal.id]?.[cat.id] || 0;
+                              return (
+                                <div key={cat.id} style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                  <span style={{ flex: 1 }}>{cat.name}</span>
+                                  <input
+                                    type="number"
+                                    className="form-input"
+                                    style={{ width: '150px', padding: '6px' }}
+                                    placeholder="Сумма экономии"
+                                    value={savings || ''}
+                                    onChange={(e) => {
+                                      const value = parseFloat(e.target.value) || 0;
+                                      setCategorySavings(prev => ({
+                                        ...prev,
+                                        [goal.id]: {
+                                          ...(prev[goal.id] || {}),
+                                          [cat.id]: value
+                                        }
+                                      }));
+                                    }}
+                                    step="1000"
+                                    min="0"
+                                  />
+                                </div>
+                              );
+                            })}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const savings = categorySavings[goal.id] || {};
+                                  await dataService.saveGoal({
+                                    ...goal,
+                                    category_savings: savings
+                                  });
+                                  await loadGoals();
+                                  await loadGoalCalculations(goal.id);
+                                  alert('Категории сохранены');
+                                } catch (error) {
+                                  console.error('Error saving category savings:', error);
+                                  alert('Ошибка при сохранении');
+                                }
+                              }}
+                              className="btn btn-primary"
+                              style={{ marginTop: '10px', width: '100%' }}
+                            >
+                              Сохранить категории
+                            </button>
+                          </div>
+                        ) : (
+                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            Создайте категории на главной странице
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

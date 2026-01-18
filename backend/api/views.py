@@ -7,10 +7,10 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from .models import User, UserSettings, Transaction, FinancialGoal, Insight
+from .models import User, UserSettings, Transaction, FinancialGoal, Insight, Category
 from .serializers import (
     UserSerializer, UserSettingsSerializer, TransactionSerializer,
-    FinancialGoalSerializer, InsightSerializer
+    FinancialGoalSerializer, InsightSerializer, CategorySerializer
 )
 
 
@@ -74,6 +74,21 @@ class UserSettingsViewSet(viewsets.ModelViewSet):
         return UserSettings.objects.none()
 
 
+class CategoryViewSet(viewsets.ModelViewSet):
+    serializer_class = CategorySerializer
+
+    def get_queryset(self):
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            return Category.objects.filter(user_id=user_id)
+        return Category.objects.none()
+
+    def perform_create(self, serializer):
+        user_id = self.request.data.get('user_id')
+        user = get_object_or_404(User, id=user_id)
+        serializer.save(user=user)
+
+
 class FinancialGoalViewSet(viewsets.ModelViewSet):
     serializer_class = FinancialGoalSerializer
 
@@ -87,6 +102,86 @@ class FinancialGoalViewSet(viewsets.ModelViewSet):
         user_id = self.request.data.get('user_id')
         user = get_object_or_404(User, id=user_id)
         serializer.save(user=user)
+
+    @action(detail=True, methods=['get'])
+    def calculations(self, request, pk=None):
+        """Расчеты для цели: среднее время достижения, рекомендуемое откладывание"""
+        goal = self.get_object()
+        user = goal.user
+        
+        from django.db.models import Sum, Avg
+        from datetime import timedelta
+        
+        # Текущие транзакции для расчета среднего откладывания
+        now = timezone.now().date()
+        start_of_month = now.replace(day=1)
+        
+        # Среднее откладывание в месяц (из разницы доходов и расходов)
+        monthly_incomes = Transaction.objects.filter(
+            user=user, type='income', date__gte=start_of_month
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        monthly_expenses = Transaction.objects.filter(
+            user=user, type='expense', date__gte=start_of_month
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        current_savings_rate = monthly_incomes - monthly_expenses
+        
+        # Если есть категории с экономией
+        category_savings = goal.category_savings or {}
+        additional_savings = Decimal('0')
+        if category_savings:
+            # Суммируем планируемую экономию по категориям
+            for cat_id, amount in category_savings.items():
+                additional_savings += Decimal(str(amount))
+        
+        total_savings_rate = current_savings_rate + additional_savings
+        
+        # Осталось накопить
+        remaining = goal.target_amount - goal.current_amount
+        
+        # Прогноз даты достижения
+        if total_savings_rate > 0:
+            months_needed = remaining / total_savings_rate
+            projected_date = now + timedelta(days=int(months_needed * 30))
+        else:
+            months_needed = None
+            projected_date = None
+        
+        # Сравнение с дедлайном
+        deadline_status = None
+        if goal.deadline:
+            if projected_date and projected_date > goal.deadline:
+                deadline_status = 'late'
+            elif projected_date and projected_date <= goal.deadline:
+                deadline_status = 'on_time'
+            else:
+                deadline_status = 'unreachable'
+        
+        # Рекомендуемое откладывание в день/месяц
+        if goal.deadline and total_savings_rate > 0:
+            days_until_deadline = (goal.deadline - now).days
+            if days_until_deadline > 0:
+                recommended_daily = remaining / days_until_deadline
+                recommended_monthly = recommended_daily * 30
+            else:
+                recommended_daily = None
+                recommended_monthly = None
+        else:
+            recommended_daily = None
+            recommended_monthly = None
+        
+        return Response({
+            'current_savings_rate': float(current_savings_rate),
+            'total_savings_rate': float(total_savings_rate),
+            'remaining': float(remaining),
+            'months_needed': float(months_needed) if months_needed else None,
+            'projected_date': projected_date.isoformat() if projected_date else None,
+            'deadline_status': deadline_status,
+            'recommended_daily': float(recommended_daily) if recommended_daily else None,
+            'recommended_monthly': float(recommended_monthly) if recommended_monthly else None,
+            'is_reachable': total_savings_rate > 0
+        })
 
 
 @api_view(['GET'])
@@ -224,6 +319,65 @@ def insights(request, user_id):
                     'percentage': float(percentage)
                 })
 
+    # Инсайты по целям
+    goals_insights = []
+    active_goals = FinancialGoal.objects.filter(user=user, status='active')
+    
+    for goal in active_goals:
+        remaining = goal.target_amount - goal.current_amount
+        
+        # Категории, которые тормозят цель
+        category_savings = goal.category_savings or {}
+        blocking_categories = []
+        
+        # Текущие траты по категориям цели
+        if category_savings:
+            for cat_id, planned_savings in category_savings.items():
+                try:
+                    category = Category.objects.get(id=cat_id, user=user)
+                    current_spending_cat = Transaction.objects.filter(
+                        user=user, type='expense', category=category.name, date__gte=start_of_month
+                    ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+                    
+                    if current_spending_cat > Decimal(str(planned_savings)):
+                        blocking_categories.append({
+                            'category': category.name,
+                            'current_spending': float(current_spending_cat),
+                            'planned_savings': float(planned_savings),
+                            'excess': float(current_spending_cat - Decimal(str(planned_savings)))
+                        })
+                except Category.DoesNotExist:
+                    pass
+        
+        # Расчет среднего откладывания
+        monthly_incomes = Transaction.objects.filter(
+            user=user, type='income', date__gte=start_of_month
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        monthly_expenses = Transaction.objects.filter(
+            user=user, type='expense', date__gte=start_of_month
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        
+        current_savings_rate = monthly_incomes - monthly_expenses
+        total_planned_savings = sum(Decimal(str(v)) for v in category_savings.values())
+        total_savings_rate = current_savings_rate + total_planned_savings
+        
+        if total_savings_rate > 0:
+            months_needed = remaining / total_savings_rate
+        else:
+            months_needed = None
+        
+        goals_insights.append({
+            'goal_id': goal.id,
+            'goal_title': goal.title,
+            'remaining': float(remaining),
+            'current_savings_rate': float(current_savings_rate),
+            'total_savings_rate': float(total_savings_rate),
+            'months_needed': float(months_needed) if months_needed else None,
+            'is_reachable': total_savings_rate > 0,
+            'blocking_categories': blocking_categories
+        })
+
     return Response({
         'daily_limit': {
             'limit': float(daily_limit),
@@ -235,5 +389,6 @@ def insights(request, user_id):
             'projected_spending': float(projected_spending),
             'current_spending': float(current_spending)
         },
-        'overspending': overspending
+        'overspending': overspending,
+        'goals_insights': goals_insights
     })

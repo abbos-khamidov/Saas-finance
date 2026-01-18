@@ -225,6 +225,78 @@ class DataService {
     const filtered = goals.filter(g => g.id !== id);
     localStorage.setItem(this.getKey('goals'), JSON.stringify(filtered));
   }
+
+  // Categories
+  async getCategories() {
+    if (this.useAPI && this.userId) {
+      try {
+        return await apiService.getCategories(this.userId);
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    const key = this.getKey('categories');
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+  }
+
+  async saveCategory(category) {
+    if (this.useAPI && this.userId) {
+      try {
+        if (category.id) {
+          return await apiService.updateCategory(category.id, {
+            name: category.name,
+          });
+        } else {
+          return await apiService.createCategory(this.userId, {
+            name: category.name,
+          });
+        }
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    const categories = await this.getCategories();
+    if (category.id) {
+      const index = categories.findIndex(c => c.id === category.id);
+      if (index >= 0) categories[index] = category;
+    } else {
+      category.id = Date.now().toString();
+      categories.push(category);
+    }
+    localStorage.setItem(this.getKey('categories'), JSON.stringify(categories));
+    return category;
+  }
+
+  async deleteCategory(id) {
+    if (this.useAPI) {
+      try {
+        await apiService.deleteCategory(id);
+        return;
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    const categories = await this.getCategories();
+    const filtered = categories.filter(c => c.id !== id);
+    localStorage.setItem(this.getKey('categories'), JSON.stringify(filtered));
+  }
+
+  // Goal calculations
+  async getGoalCalculations(goalId) {
+    if (this.useAPI) {
+      try {
+        return await apiService.getGoalCalculations(goalId);
+      } catch (error) {
+        console.warn('API unavailable for goal calculations', error);
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 // Singleton instance

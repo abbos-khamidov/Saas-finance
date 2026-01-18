@@ -131,6 +131,39 @@ class ApiService {
   async getInsights(userId) {
     return this.request(`/insights/${userId}/`);
   }
+
+  // Categories
+  async getCategories(userId) {
+    return this.request(`/categories/?user_id=${userId}`);
+  }
+
+  async createCategory(userId, category) {
+    return this.request('/categories/', {
+      method: 'POST',
+      body: {
+        user_id: userId,
+        ...category,
+      },
+    });
+  }
+
+  async updateCategory(categoryId, category) {
+    return this.request(`/categories/${categoryId}/`, {
+      method: 'PUT',
+      body: category,
+    });
+  }
+
+  async deleteCategory(categoryId) {
+    return this.request(`/categories/${categoryId}/`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Goal calculations
+  async getGoalCalculations(goalId) {
+    return this.request(`/goals/${goalId}/calculations/`);
+  }
 }
 
 export default new ApiService();
