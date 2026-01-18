@@ -434,6 +434,7 @@ export default function DashboardPage() {
 
       {/* Transactions Tab */}
       {activeTab === 'transactions' && (
+        <>
         <div className="form-section">
           <div className="transaction-tabs">
             <button 
@@ -525,10 +526,9 @@ export default function DashboardPage() {
             Добавить {type === 'expense' ? 'расход' : 'доход'}
           </button>
         </form>
-      </div>
 
           {/* Transactions List - Grouped by Month/Day */}
-          <div className="form-section">
+          <div className="form-section" style={{ marginTop: '20px' }}>
             <h2 className="section-title">Транзакции</h2>
             <div className="expenses-list">
               {!loading && transactions.length === 0 ? (
@@ -661,6 +661,7 @@ export default function DashboardPage() {
               ) : null}
             </div>
           </div>
+        </>
         )}
 
         {/* Savings Tab */}
