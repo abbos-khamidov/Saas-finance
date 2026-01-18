@@ -23,23 +23,35 @@ export default function GoalsPage() {
   const [categorySavings, setCategorySavings] = useState({}); // {goalId: {categoryId: amount}}
 
   useEffect(() => {
-    loadGoals();
-    loadCategories();
+    const initialize = async () => {
+      try {
+        await Promise.all([loadGoals(), loadCategories()]);
+      } catch (error) {
+        console.error('Error initializing GoalsPage:', error);
+      }
+    };
+    initialize();
   }, []);
 
   const loadCategories = async () => {
     try {
       const data = await dataService.getCategories();
-      setCategories(data || []);
+      if (Array.isArray(data)) {
+        setCategories(data);
+      } else {
+        setCategories([]);
+      }
     } catch (error) {
       console.error('Error loading categories:', error);
+      setCategories([]);
     }
   };
 
   const loadGoalCalculations = async (goalId) => {
+    if (!goalId) return;
     try {
       const calc = await dataService.getGoalCalculations(goalId);
-      if (calc) {
+      if (calc && typeof calc === 'object') {
         setGoalCalculations(prev => ({ ...prev, [goalId]: calc }));
       }
     } catch (error) {
@@ -50,9 +62,14 @@ export default function GoalsPage() {
   const loadGoals = async () => {
     try {
       const data = await dataService.getGoals();
-      setGoals(data || []);
+      if (Array.isArray(data)) {
+        setGoals(data);
+      } else {
+        setGoals([]);
+      }
     } catch (error) {
       console.error('Error loading goals:', error);
+      setGoals([]);
     }
   };
 
@@ -165,7 +182,8 @@ export default function GoalsPage() {
         ) : (
           <div className="goals-grid">
             {goals.map(goal => {
-              const progress = goal.progress_percentage || ((goal.current_amount / goal.target_amount) * 100);
+              if (!goal || !goal.id) return null;
+              const progress = goal.progress_percentage || ((goal.current_amount || 0) / (goal.target_amount || 1) * 100);
               return (
                 <div key={goal.id} className="goal-card wow">
                   <div className="goal-header">
@@ -234,10 +252,10 @@ export default function GoalsPage() {
                           <h4 style={{ fontSize: '1rem', marginBottom: '10px' }}>Расчеты достижения цели</h4>
                           <div className="insight-card" style={{ marginBottom: '10px' }}>
                             <div style={{ fontSize: '0.9rem' }}>
-                              <div><strong>Текущая скорость накопления:</strong> {formatAmount(goalCalculations[goal.id].current_savings_rate)}/мес</div>
+                              <div><strong>Текущая скорость накопления:</strong> {formatAmount(goalCalculations[goal.id].current_savings_rate || 0)}/мес</div>
                               {goalCalculations[goal.id].total_savings_rate > 0 && (
                                 <div style={{ marginTop: '5px' }}>
-                                  <strong>С учетом экономии:</strong> {formatAmount(goalCalculations[goal.id].total_savings_rate)}/мес
+                                  <strong>С учетом экономии:</strong> {formatAmount(goalCalculations[goal.id].total_savings_rate || 0)}/мес
                                 </div>
                               )}
                               {goalCalculations[goal.id].projected_date && (
@@ -250,7 +268,7 @@ export default function GoalsPage() {
                                 <div style={{ marginTop: '10px', padding: '10px', background: 'var(--bg-secondary)', borderRadius: '8px' }}>
                                   <strong>Рекомендуется откладывать:</strong>
                                   <div style={{ marginTop: '5px' }}>
-                                    {formatAmount(goalCalculations[goal.id].recommended_daily)}/день или {formatAmount(goalCalculations[goal.id].recommended_monthly)}/мес
+                                    {formatAmount(goalCalculations[goal.id].recommended_daily || 0)}/день или {formatAmount(goalCalculations[goal.id].recommended_monthly || 0)}/мес
                                   </div>
                                 </div>
                               )}
@@ -268,10 +286,11 @@ export default function GoalsPage() {
                         {categories.length > 0 ? (
                           <div>
                             {categories.map(cat => {
+                              if (!cat || !cat.id) return null;
                               const savings = categorySavings[goal.id]?.[cat.id] || 0;
                               return (
                                 <div key={cat.id} style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                  <span style={{ flex: 1 }}>{cat.name}</span>
+                                  <span style={{ flex: 1 }}>{cat.name || 'Без названия'}</span>
                                   <input
                                     type="number"
                                     className="form-input"

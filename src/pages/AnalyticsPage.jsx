@@ -51,29 +51,45 @@ export default function AnalyticsPage() {
     setLoading(true);
     try {
       const all = await dataService.getTransactions();
-      let filtered = all;
+      let filtered = Array.isArray(all) ? all : [];
       
       if (period === 'month') {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         filtered = all.filter(t => {
-          const date = new Date(t.date || t.created_at);
-          return date >= startOfMonth;
+          if (!t || !(t.date || t.created_at)) return false;
+          try {
+            const date = new Date(t.date || t.created_at);
+            return date >= startOfMonth;
+          } catch {
+            return false;
+          }
         });
       } else if (period === 'week') {
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
         filtered = all.filter(t => {
-          const date = new Date(t.date || t.created_at);
-          return date >= weekAgo;
+          if (!t || !(t.date || t.created_at)) return false;
+          try {
+            const date = new Date(t.date || t.created_at);
+            return date >= weekAgo;
+          } catch {
+            return false;
+          }
         });
       }
       
-      setTransactions(filtered.sort((a, b) => {
-        const aTime = a.created_at || a.timestamp || 0;
-        const bTime = b.created_at || b.timestamp || 0;
-        return new Date(bTime) - new Date(aTime);
-      }));
+      setTransactions(filtered
+        .filter(t => t && (t.created_at || t.timestamp || t.date))
+        .sort((a, b) => {
+          try {
+            const aTime = a.created_at || a.timestamp || a.date || 0;
+            const bTime = b.created_at || b.timestamp || b.date || 0;
+            return new Date(bTime) - new Date(aTime);
+          } catch {
+            return 0;
+          }
+        }));
 
       const settings = await dataService.getUserSettings();
       setUserSettings(settings);
@@ -90,8 +106,8 @@ export default function AnalyticsPage() {
     return new Intl.NumberFormat('ru-RU').format(val) + ' сум';
   };
 
-  const expenses = transactions.filter(t => t.type === 'expense');
-  const incomes = transactions.filter(t => t.type === 'income');
+  const expenses = (transactions || []).filter(t => t && t.type === 'expense');
+  const incomes = (transactions || []).filter(t => t && t.type === 'income');
   const totalExpense = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
   const totalIncome = incomes.reduce((sum, t) => sum + (t.amount || 0), 0);
   const balance = totalIncome - totalExpense;
@@ -99,6 +115,7 @@ export default function AnalyticsPage() {
   // Category breakdown
   const byCategory = {};
   expenses.forEach(e => {
+    if (!e) return;
     const cat = e.category || 'Другое';
     byCategory[cat] = (byCategory[cat] || 0) + (e.amount || 0);
   });

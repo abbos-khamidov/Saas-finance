@@ -153,56 +153,83 @@ export default function DashboardPage() {
     const now = new Date();
     const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     
-    transactions.forEach(transaction => {
-      const date = new Date(transaction.date || transaction.created_at);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const dayKey = `${monthKey}-${String(date.getDate()).padStart(2, '0')}`;
-      
-      if (!grouped[monthKey]) {
-        grouped[monthKey] = {
-          monthKey,
-          monthName: date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }),
-          isCurrent: monthKey === currentMonthKey,
-          days: {},
-          income: 0,
-          expense: 0,
-        };
-      }
-      
-      if (!grouped[monthKey].days[dayKey]) {
-        grouped[monthKey].days[dayKey] = {
-          dayKey,
-          dayName: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }),
-          date: date,
-          transactions: [],
-          income: 0,
-          expense: 0,
-        };
-      }
-      
-      grouped[monthKey].days[dayKey].transactions.push(transaction);
-      
-      if (transaction.type === 'income') {
-        grouped[monthKey].days[dayKey].income += transaction.amount || 0;
-        grouped[monthKey].income += transaction.amount || 0;
-      } else {
-        grouped[monthKey].days[dayKey].expense += transaction.amount || 0;
-        grouped[monthKey].expense += transaction.amount || 0;
+    (transactions || []).forEach(transaction => {
+      if (!transaction || !(transaction.date || transaction.created_at)) return;
+      try {
+        const date = new Date(transaction.date || transaction.created_at);
+        if (isNaN(date.getTime())) return; // Invalid date
+        
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const dayKey = `${monthKey}-${String(date.getDate()).padStart(2, '0')}`;
+        
+        if (!grouped[monthKey]) {
+          grouped[monthKey] = {
+            monthKey,
+            monthName: date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }),
+            isCurrent: monthKey === currentMonthKey,
+            days: {},
+            income: 0,
+            expense: 0,
+          };
+        }
+        
+        if (!grouped[monthKey].days[dayKey]) {
+          grouped[monthKey].days[dayKey] = {
+            dayKey,
+            dayName: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }),
+            date: date,
+            transactions: [],
+            income: 0,
+            expense: 0,
+          };
+        }
+        
+        grouped[monthKey].days[dayKey].transactions.push(transaction);
+        
+        if (transaction.type === 'income') {
+          grouped[monthKey].days[dayKey].income += transaction.amount || 0;
+          grouped[monthKey].income += transaction.amount || 0;
+        } else if (transaction.type === 'expense') {
+          grouped[monthKey].days[dayKey].expense += transaction.amount || 0;
+          grouped[monthKey].expense += transaction.amount || 0;
+        }
+      } catch (error) {
+        console.warn('Error processing transaction:', error, transaction);
       }
     });
 
     // Сортируем дни внутри месяца по дате (новые сверху)
     Object.keys(grouped).forEach(monthKey => {
-      const days = Object.values(grouped[monthKey].days).sort((a, b) => b.date - a.date);
-      grouped[monthKey].daysSorted = days;
+      try {
+        const days = Object.values(grouped[monthKey].days)
+          .filter(day => day && day.date)
+          .sort((a, b) => {
+            try {
+              return b.date - a.date;
+            } catch {
+              return 0;
+            }
+          });
+        grouped[monthKey].daysSorted = days;
+      } catch (error) {
+        console.warn('Error sorting days for month:', monthKey, error);
+        grouped[monthKey].daysSorted = [];
+      }
     });
 
     // Сортируем месяцы (новые сверху)
-    return Object.values(grouped).sort((a, b) => {
-      if (a.monthKey > b.monthKey) return -1;
-      if (a.monthKey < b.monthKey) return 1;
-      return 0;
-    });
+    try {
+      return Object.values(grouped)
+        .filter(month => month && month.monthKey)
+        .sort((a, b) => {
+          if (a.monthKey > b.monthKey) return -1;
+          if (a.monthKey < b.monthKey) return 1;
+          return 0;
+        });
+    } catch (error) {
+      console.warn('Error sorting months:', error);
+      return [];
+    }
   }, [transactions]);
 
   // Инициализация: раскрываем только текущий месяц
@@ -227,8 +254,8 @@ export default function DashboardPage() {
     });
   };
 
-  const expenses = transactions.filter(t => t.type === 'expense');
-  const incomes = transactions.filter(t => t.type === 'income');
+  const expenses = (transactions || []).filter(t => t && t.type === 'expense');
+  const incomes = (transactions || []).filter(t => t && t.type === 'income');
   const totalExpense = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
   const totalIncome = incomes.reduce((sum, t) => sum + (t.amount || 0), 0);
   const balance = totalIncome - totalExpense;
@@ -543,10 +570,11 @@ export default function DashboardPage() {
                     После добавления нескольких записей здесь появятся аналитика и инсайты.
                   </p>
                 </div>
-              ) : !loading ? (
+              ) : !loading && groupedTransactions && groupedTransactions.length > 0 ? (
                 groupedTransactions.map(month => {
+                  if (!month || !month.monthKey) return null;
                   const isExpanded = expandedMonths.has(month.monthKey);
-                  const monthBalance = month.income - month.expense;
+                  const monthBalance = (month.income || 0) - (month.expense || 0);
                   
                   return (
                     <div key={month.monthKey} className="transaction-month-group">
@@ -597,63 +625,66 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Month Content - Days */}
-                      {isExpanded && (
+                      {isExpanded && month.daysSorted && month.daysSorted.length > 0 && (
                         <div className="transaction-days-container" style={{ marginBottom: '20px', marginLeft: '20px' }}>
-                          {month.daysSorted.map(day => (
-                            <div key={day.dayKey} className="transaction-day-group" style={{ marginBottom: '15px' }}>
-                              <div style={{
-                                fontSize: '0.9rem',
-                                color: 'var(--text-secondary)',
-                                marginBottom: '8px',
-                                fontWeight: '500'
-                              }}>
-                                {day.dayName}
-                              </div>
-                              <div className="expenses-list">
-                                {day.transactions.map(transaction => (
-                                  <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
-                                    <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
-                                    <div className="expense-details">
-                                      <div className="expense-category-name">
-                                        {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category}
-                                      </div>
-                                      <div className="expense-date">
-                                        {new Date(transaction.date || transaction.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                                      </div>
-                                    </div>
-                                    <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
-                                      {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount)}
-                                    </div>
-                                    <button 
-                                      onClick={() => deleteTransaction(transaction.id)}
-                                      className="btn-delete"
-                                      style={{ marginLeft: 'auto' }}
-                                      title="Удалить"
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                              {(day.income > 0 || day.expense > 0) && (
+                          {month.daysSorted.map(day => {
+                            if (!day || !day.dayKey) return null;
+                            return (
+                              <div key={day.dayKey} className="transaction-day-group" style={{ marginBottom: '15px' }}>
                                 <div style={{
-                                  fontSize: '0.85rem',
+                                  fontSize: '0.9rem',
                                   color: 'var(--text-secondary)',
-                                  marginTop: '8px',
-                                  marginBottom: '10px',
-                                  paddingLeft: '10px',
-                                  borderLeft: '2px solid var(--border)'
+                                  marginBottom: '8px',
+                                  fontWeight: '500'
                                 }}>
-                                  <span style={{ color: 'var(--success)', marginRight: '15px' }}>
-                                    +{formatAmount(day.income)}
-                                  </span>
-                                  <span style={{ color: 'var(--danger)' }}>
-                                    −{formatAmount(day.expense)}
-                                  </span>
+                                  {day.dayName}
                                 </div>
-                              )}
-                            </div>
-                          ))}
+                                <div className="expenses-list">
+                                  {day.transactions.map(transaction => (
+                                    <div key={transaction.id} className={`expense-item ${transaction.type === 'income' ? 'income-item' : ''}`}>
+                                      <div className="expense-category">{transaction.type === 'income' ? '+' : '−'}</div>
+                                      <div className="expense-details">
+                                        <div className="expense-category-name">
+                                          {transaction.type === 'income' ? transaction.description || 'Доход' : transaction.category}
+                                        </div>
+                                        <div className="expense-date">
+                                          {new Date(transaction.date || transaction.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                      </div>
+                                      <div className={`expense-amount ${transaction.type === 'income' ? 'income-amount' : ''}`}>
+                                        {transaction.type === 'income' ? '+' : '−'}{formatAmount(transaction.amount)}
+                                      </div>
+                                      <button 
+                                        onClick={() => deleteTransaction(transaction.id)}
+                                        className="btn-delete"
+                                        style={{ marginLeft: 'auto' }}
+                                        title="Удалить"
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                                {(day.income > 0 || day.expense > 0) && (
+                                  <div style={{
+                                    fontSize: '0.85rem',
+                                    color: 'var(--text-secondary)',
+                                    marginTop: '8px',
+                                    marginBottom: '10px',
+                                    paddingLeft: '10px',
+                                    borderLeft: '2px solid var(--border)'
+                                  }}>
+                                    <span style={{ color: 'var(--success)', marginRight: '15px' }}>
+                                      +{formatAmount(day.income || 0)}
+                                    </span>
+                                    <span style={{ color: 'var(--danger)' }}>
+                                      −{formatAmount(day.expense || 0)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

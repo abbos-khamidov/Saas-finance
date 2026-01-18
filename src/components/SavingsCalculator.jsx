@@ -11,27 +11,42 @@ export default function SavingsCalculator({ transactions, userSettings, formatAm
   const loadGoals = async () => {
     try {
       const data = await dataService.getGoals();
-      setGoals(data.filter(g => g.status === 'active') || []);
+      if (Array.isArray(data)) {
+        setGoals(data.filter(g => g && g.status === 'active') || []);
+      } else {
+        setGoals([]);
+      }
     } catch (error) {
       console.error('Error loading goals:', error);
+      setGoals([]);
     } finally {
       setLoading(false);
     }
   };
 
   // Расчет доступных средств для откладывания
-  const expenses = transactions.filter(t => t.type === 'expense');
-  const incomes = transactions.filter(t => t.type === 'income');
+  const expenses = (transactions || []).filter(t => t && t.type === 'expense');
+  const incomes = (transactions || []).filter(t => t && t.type === 'income');
   const currentMonthExpenses = expenses.filter(t => {
-    const date = new Date(t.date);
-    const now = new Date();
-    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    if (!t || !t.date) return false;
+    try {
+      const date = new Date(t.date);
+      const now = new Date();
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    } catch {
+      return false;
+    }
   }).reduce((sum, t) => sum + (t.amount || 0), 0);
   
   const currentMonthIncomes = incomes.filter(t => {
-    const date = new Date(t.date);
-    const now = new Date();
-    return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    if (!t || !t.date) return false;
+    try {
+      const date = new Date(t.date);
+      const now = new Date();
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    } catch {
+      return false;
+    }
   }).reduce((sum, t) => sum + (t.amount || 0), 0);
 
   const monthlyIncome = userSettings.monthlyIncome || 0;
@@ -96,8 +111,16 @@ export default function SavingsCalculator({ transactions, userSettings, formatAm
         <div style={{ marginTop: '20px' }}>
           <h3 className="section-title" style={{ fontSize: '1.1rem', marginBottom: '15px' }}>По вашим целям</h3>
           {goals.map(goal => {
-            const remaining = goal.target_amount - (goal.current_amount || 0);
-            const deadlineDays = goal.deadline ? Math.max(1, Math.ceil((new Date(goal.deadline) - new Date()) / (1000 * 60 * 60 * 24))) : 30;
+            if (!goal || !goal.id) return null;
+            const remaining = (goal.target_amount || 0) - (goal.current_amount || 0);
+            let deadlineDays = 30;
+            if (goal.deadline) {
+              try {
+                deadlineDays = Math.max(1, Math.ceil((new Date(goal.deadline) - new Date()) / (1000 * 60 * 60 * 24)));
+              } catch {
+                deadlineDays = 30;
+              }
+            }
             const dailyForGoal = remaining > 0 && deadlineDays > 0 
               ? Math.min(recommendedDaily, remaining / deadlineDays)
               : 0;
@@ -105,7 +128,7 @@ export default function SavingsCalculator({ transactions, userSettings, formatAm
             return (
               <div key={goal.id} className="insight-card wow" style={{ marginBottom: '15px' }}>
                 <div className="insight-header">
-                  <span className="insight-title">{goal.title}</span>
+                  <span className="insight-title">{goal.title || 'Без названия'}</span>
                 </div>
                 <div className="insight-message">
                   <div>Осталось: {formatAmount(remaining)}</div>
