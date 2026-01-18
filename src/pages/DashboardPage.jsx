@@ -147,6 +147,86 @@ export default function DashboardPage() {
     return new Intl.NumberFormat('ru-RU').format(val) + ' сум';
   };
 
+  // Группировка транзакций по месяцам и дням
+  const groupedTransactions = useMemo(() => {
+    const grouped = {};
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    
+    transactions.forEach(transaction => {
+      const date = new Date(transaction.date || transaction.created_at);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const dayKey = `${monthKey}-${String(date.getDate()).padStart(2, '0')}`;
+      
+      if (!grouped[monthKey]) {
+        grouped[monthKey] = {
+          monthKey,
+          monthName: date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long' }),
+          isCurrent: monthKey === currentMonthKey,
+          days: {},
+          income: 0,
+          expense: 0,
+        };
+      }
+      
+      if (!grouped[monthKey].days[dayKey]) {
+        grouped[monthKey].days[dayKey] = {
+          dayKey,
+          dayName: date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }),
+          date: date,
+          transactions: [],
+          income: 0,
+          expense: 0,
+        };
+      }
+      
+      grouped[monthKey].days[dayKey].transactions.push(transaction);
+      
+      if (transaction.type === 'income') {
+        grouped[monthKey].days[dayKey].income += transaction.amount || 0;
+        grouped[monthKey].income += transaction.amount || 0;
+      } else {
+        grouped[monthKey].days[dayKey].expense += transaction.amount || 0;
+        grouped[monthKey].expense += transaction.amount || 0;
+      }
+    });
+
+    // Сортируем дни внутри месяца по дате (новые сверху)
+    Object.keys(grouped).forEach(monthKey => {
+      const days = Object.values(grouped[monthKey].days).sort((a, b) => b.date - a.date);
+      grouped[monthKey].daysSorted = days;
+    });
+
+    // Сортируем месяцы (новые сверху)
+    return Object.values(grouped).sort((a, b) => {
+      if (a.monthKey > b.monthKey) return -1;
+      if (a.monthKey < b.monthKey) return 1;
+      return 0;
+    });
+  }, [transactions]);
+
+  // Инициализация: раскрываем только текущий месяц
+  useEffect(() => {
+    if (groupedTransactions.length > 0 && expandedMonths.size === 0) {
+      const currentMonth = groupedTransactions.find(m => m.isCurrent);
+      if (currentMonth) {
+        setExpandedMonths(new Set([currentMonth.monthKey]));
+      }
+    }
+  }, [groupedTransactions, expandedMonths]);
+
+  const toggleMonth = (monthKey) => {
+    setExpandedMonths(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(monthKey)) {
+        newSet.delete(monthKey);
+      } else {
+        newSet.add(monthKey);
+      }
+      return newSet;
+    });
+  };
+
   const expenses = transactions.filter(t => t.type === 'expense');
   const incomes = transactions.filter(t => t.type === 'income');
   const totalExpense = expenses.reduce((sum, t) => sum + (t.amount || 0), 0);
