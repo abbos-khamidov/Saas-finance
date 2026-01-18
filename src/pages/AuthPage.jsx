@@ -22,16 +22,19 @@ export default function AuthPage() {
     try {
       if (!email || !password) {
         setError('Заполните все поля');
+        setLoading(false);
         return;
       }
       if (password.length < 6) {
         setError('Пароль должен быть минимум 6 символов');
+        setLoading(false);
         return;
       }
       
       await login(email, password);
       navigate('/');
     } catch (err) {
+      console.error('Login error:', err);
       setError(err.message || 'Ошибка входа');
     } finally {
       setLoading(false);
@@ -47,14 +50,17 @@ export default function AuthPage() {
     try {
       if (!email || !password || !confirmPassword) {
         setError('Заполните все поля');
+        setLoading(false);
         return;
       }
       if (password.length < 6) {
         setError('Пароль должен быть минимум 6 символов');
+        setLoading(false);
         return;
       }
       if (password !== confirmPassword) {
         setError('Пароли не совпадают');
+        setLoading(false);
         return;
       }
       
@@ -62,6 +68,7 @@ export default function AuthPage() {
       setSuccess('Регистрация успешна!');
       setTimeout(() => navigate('/onboarding'), 1000);
     } catch (err) {
+      console.error('Registration error:', err);
       setError(err.message || 'Ошибка регистрации');
     } finally {
       setLoading(false);
