@@ -26,43 +26,60 @@ export default function DashboardPage() {
     loadData();
   }, []);
 
-  const checkOnboarding = () => {
-    if (!dataService.hasCompletedOnboarding()) {
+  const checkOnboarding = async () => {
+    const completed = await dataService.hasCompletedOnboarding();
+    if (!completed) {
       navigate('/onboarding');
     }
   };
 
-  const loadData = () => {
-    const data = dataService.getTransactions();
-    setTransactions(data.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
-    const settings = dataService.getUserSettings();
-    setUserSettings(settings);
+  const loadData = async () => {
+    try {
+      const data = await dataService.getTransactions();
+      setTransactions(data.sort((a, b) => {
+        const aTime = a.created_at || a.timestamp || 0;
+        const bTime = b.created_at || b.timestamp || 0;
+        return new Date(bTime) - new Date(aTime);
+      }));
+      const settings = await dataService.getUserSettings();
+      setUserSettings(settings);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!amount || !date) return;
 
     const transaction = {
-      id: Date.now().toString(),
       type,
       amount: parseFloat(amount),
       date,
       category: type === 'expense' ? category : '',
       description: type === 'income' ? description : '',
-      timestamp: Date.now()
     };
 
-    dataService.saveTransaction(transaction);
-    loadData();
-    setAmount('');
-    setCategory('');
-    setDescription('');
+    try {
+      await dataService.saveTransaction(transaction);
+      await loadData();
+      setAmount('');
+      setCategory('');
+      setDescription('');
+    } catch (error) {
+      console.error('Error saving transaction:', error);
+      alert('Ошибка при сохранении транзакции');
+    }
   };
 
-  const deleteTransaction = (id) => {
-    dataService.deleteTransaction(id);
-    loadData();
+  const deleteTransaction = async (id) => {
+    try {
+      await dataService.deleteTransaction(id);
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      alert('Ошибка при удалении транзакции');
+    }
   };
 
   const formatAmount = (val) => {
@@ -82,16 +99,11 @@ export default function DashboardPage() {
     return insightsCalc.getAllInsights(userSettings.budgets || {});
   }, [transactions, userSettings]);
 
-  const isPro = userSettings?.subscription === 'pro';
+  // Все функции доступны без ограничений Pro
   const dailyLimit = insights?.dailyLimit || { dailyRemaining: 0, daysRemaining: 0 };
   const forecast = insights?.forecast || { forecastBalance: 0 };
   const comparison = insights?.comparison || { current: 0, previous: 0, percentage: 0, trend: 'same' };
   const overspending = insights?.overspending || [];
-
-  const handleUpgradeToPro = () => {
-    alert('Переход на страницу оплаты Pro подписки ($8.99/мес)...\n\nВ будущем здесь будет интеграция с платежной системой (Stripe)');
-    // В будущем: dataService.updateSubscription('pro');
-  };
 
   const progressPercentage = dailyLimit.dailyLimit > 0 
     ? Math.min(100, (dailyLimit.dailyRemaining / dailyLimit.dailyLimit) * 100)
@@ -103,11 +115,10 @@ export default function DashboardPage() {
         <div className="nav-links">
           <Link to="/" className="nav-link active">Главная</Link>
           <Link to="/analytics" className="nav-link">Аналитика</Link>
+          <Link to="/goals" className="nav-link">Цели</Link>
         </div>
         <div className="user-info">
           <span className="user-email">{user?.email || 'Загрузка...'}</span>
-          {isPro && <span className="subscription-badge pro">Pro</span>}
-          {!isPro && <button onClick={handleUpgradeToPro} className="btn-upgrade">Перейти на Pro</button>}
           <button onClick={logout} className="btn-logout">Выход</button>
         </div>
       </nav>
@@ -198,16 +209,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Pro CTA */}
-      {!isPro && transactions.length >= 3 && (
-        <div className="pro-cta wow" id="proCTA">
-          <div className="pro-cta-content">
-            <h3>🚀 Перейдите на Pro за $8.99/мес</h3>
-            <p>Получите доступ к расширенной аналитике, неограниченным бюджетам и экспорту данных</p>
-            <button onClick={handleUpgradeToPro} className="btn btn-primary">Перейти на Pro</button>
-          </div>
-        </div>
-      )}
 
       {/* Transaction Form */}
       <div className="form-section">
@@ -310,6 +311,7 @@ export default function DashboardPage() {
                   onClick={() => deleteTransaction(transaction.id)}
                   className="btn-delete"
                   style={{ marginLeft: 'auto' }}
+                  title="Удалить"
                 >
                   ×
                 </button>

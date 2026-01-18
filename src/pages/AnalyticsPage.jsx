@@ -14,21 +14,35 @@ export default function AnalyticsPage() {
     loadTransactions();
   }, [period]);
 
-  const loadTransactions = () => {
-    const all = dataService.getTransactions();
-    let filtered = all;
-    
-    if (period === 'month') {
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      filtered = all.filter(t => new Date(t.date) >= startOfMonth);
-    } else if (period === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      filtered = all.filter(t => new Date(t.date) >= weekAgo);
+  const loadTransactions = async () => {
+    try {
+      const all = await dataService.getTransactions();
+      let filtered = all;
+      
+      if (period === 'month') {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        filtered = all.filter(t => {
+          const date = new Date(t.date || t.created_at);
+          return date >= startOfMonth;
+        });
+      } else if (period === 'week') {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        filtered = all.filter(t => {
+          const date = new Date(t.date || t.created_at);
+          return date >= weekAgo;
+        });
+      }
+      
+      setTransactions(filtered.sort((a, b) => {
+        const aTime = a.created_at || a.timestamp || 0;
+        const bTime = b.created_at || b.timestamp || 0;
+        return new Date(bTime) - new Date(aTime);
+      }));
+    } catch (error) {
+      console.error('Error loading transactions:', error);
     }
-    
-    setTransactions(filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)));
   };
 
   const formatAmount = (val) => {
@@ -54,6 +68,7 @@ export default function AnalyticsPage() {
         <div className="nav-links">
           <Link to="/" className="nav-link">Главная</Link>
           <Link to="/analytics" className="nav-link active">Аналитика</Link>
+          <Link to="/goals" className="nav-link">Цели</Link>
         </div>
         <div className="user-info">
           <span className="user-email">{user?.email || 'Загрузка...'}</span>

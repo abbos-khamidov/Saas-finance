@@ -17,6 +17,7 @@ export default function OnboardingPage() {
     try {
       if (!monthlyIncome || !fixedExpenses) {
         alert('Пожалуйста, заполните обязательные поля');
+        setLoading(false);
         return;
       }
 
@@ -29,7 +30,8 @@ export default function OnboardingPage() {
 
       navigate('/');
     } catch (error) {
-      alert('Ошибка при сохранении данных: ' + error.message);
+      console.error('Onboarding error:', error);
+      alert('Ошибка при сохранении данных: ' + (error.message || 'Неизвестная ошибка'));
     } finally {
       setLoading(false);
     }

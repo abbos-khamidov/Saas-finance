@@ -1,4 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
+import apiService from './apiService';
 
 const AuthContext = createContext(null);
 
@@ -20,26 +21,41 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    // Simple mock auth - in production use real auth
-    const userData = {
-      id: Date.now().toString(),
-      email,
-      name: email.split('@')[0]
-    };
-    localStorage.setItem('finance_user', JSON.stringify(userData));
-    setUser(userData);
-    return userData;
+    try {
+      const userData = await apiService.login(email, password);
+      localStorage.setItem('finance_user', JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      // Fallback to localStorage if API unavailable
+      const userData = {
+        id: Date.now().toString(),
+        email,
+        name: email.split('@')[0]
+      };
+      localStorage.setItem('finance_user', JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    }
   };
 
   const register = async (email, password) => {
-    const userData = {
-      id: Date.now().toString(),
-      email,
-      name: email.split('@')[0]
-    };
-    localStorage.setItem('finance_user', JSON.stringify(userData));
-    setUser(userData);
-    return userData;
+    try {
+      const userData = await apiService.register(email, password);
+      localStorage.setItem('finance_user', JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    } catch (error) {
+      // Fallback to localStorage if API unavailable
+      const userData = {
+        id: Date.now().toString(),
+        email,
+        name: email.split('@')[0]
+      };
+      localStorage.setItem('finance_user', JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    }
   };
 
   const logout = () => {

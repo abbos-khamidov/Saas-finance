@@ -1,9 +1,10 @@
-// Data Service - хранит данные в localStorage (JSON)
-// В будущем можно заменить на PostgreSQL через API
+// Data Service - работает с Django API с fallback на localStorage
+import apiService from './apiService';
 
 class DataService {
   constructor() {
     this.userId = this.getUserId();
+    this.useAPI = true; // Использовать API по умолчанию
   }
 
   getUserId() {
@@ -15,15 +16,40 @@ class DataService {
     return `finance_${this.userId}_${key}`;
   }
 
-  // Transactions (expenses & incomes)
-  getTransactions() {
+  // Transactions
+  async getTransactions() {
+    if (this.useAPI && this.userId) {
+      try {
+        const result = await apiService.getTransactions(this.userId);
+        return Array.isArray(result) ? result : [];
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    // Fallback to localStorage
     const key = this.getKey('transactions');
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   }
 
-  saveTransaction(transaction) {
-    const transactions = this.getTransactions();
+  async saveTransaction(transaction) {
+    if (this.useAPI && this.userId) {
+      try {
+        return await apiService.createTransaction(this.userId, {
+          type: transaction.type,
+          amount: transaction.amount.toString(),
+          category: transaction.category || '',
+          description: transaction.description || '',
+          date: transaction.date,
+        });
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    // Fallback to localStorage
+    const transactions = await this.getTransactions();
     const newTransaction = {
       ...transaction,
       id: transaction.id || Date.now().toString(),
@@ -34,14 +60,45 @@ class DataService {
     return newTransaction;
   }
 
-  deleteTransaction(id) {
-    const transactions = this.getTransactions();
+  async deleteTransaction(id) {
+    if (this.useAPI) {
+      try {
+        await apiService.deleteTransaction(id);
+        return;
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    // Fallback to localStorage
+    const transactions = await this.getTransactions();
     const filtered = transactions.filter(t => t.id !== id);
     localStorage.setItem(this.getKey('transactions'), JSON.stringify(filtered));
   }
 
   // User Settings
-  getUserSettings() {
+  async getUserSettings() {
+    if (this.useAPI && this.userId) {
+      try {
+        const settings = await apiService.getSettings(this.userId);
+        if (settings) {
+          // Конвертируем формат из API в формат приложения
+          return {
+            monthlyIncome: parseFloat(settings.monthly_income) || 0,
+            fixedExpenses: parseFloat(settings.fixed_expenses) || 0,
+            financialGoal: settings.financial_goal || '',
+            budgets: settings.budgets || {},
+            onboardingCompleted: settings.onboarding_completed || false,
+            id: settings.id,
+            userId: settings.user
+          };
+        }
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    // Fallback to localStorage
     const key = this.getKey('settings');
     const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : {
@@ -49,52 +106,124 @@ class DataService {
       fixedExpenses: 0,
       financialGoal: '',
       budgets: {},
-      subscription: 'free',
       onboardingCompleted: false
     };
   }
 
-  saveUserSettings(settings) {
-    const current = this.getUserSettings();
+  async saveUserSettings(settings) {
+    if (this.useAPI && this.userId) {
+      try {
+        const current = await this.getUserSettings();
+        const apiSettings = {
+          monthly_income: settings.monthlyIncome || current.monthlyIncome,
+          fixed_expenses: settings.fixedExpenses || current.fixedExpenses,
+          financial_goal: settings.financialGoal !== undefined ? settings.financialGoal : current.financialGoal,
+          budgets: settings.budgets !== undefined ? settings.budgets : current.budgets,
+          onboarding_completed: settings.onboardingCompleted !== undefined ? settings.onboardingCompleted : current.onboardingCompleted,
+        };
+
+        if (current.id) {
+          await apiService.updateSettings(current.id, apiSettings);
+        } else {
+          await apiService.createSettings(this.userId, apiSettings);
+        }
+        return await this.getUserSettings();
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    // Fallback to localStorage
+    const current = await this.getUserSettings();
     const updated = { ...current, ...settings };
     localStorage.setItem(this.getKey('settings'), JSON.stringify(updated));
     return updated;
   }
 
-  completeOnboarding(data) {
+  async completeOnboarding(data) {
     const settings = {
       monthlyIncome: parseFloat(data.monthlyIncome) || 0,
       fixedExpenses: parseFloat(data.fixedExpenses) || 0,
       financialGoal: data.financialGoal || '',
       budgets: {},
-      subscription: 'free',
       onboardingCompleted: true
     };
     return this.saveUserSettings(settings);
   }
 
-  hasCompletedOnboarding() {
-    const settings = this.getUserSettings();
+  async hasCompletedOnboarding() {
+    const settings = await this.getUserSettings();
     return settings.onboardingCompleted === true;
   }
 
-  // Subscription management
-  updateSubscription(tier) {
-    const settings = this.getUserSettings();
-    settings.subscription = tier;
-    return this.saveUserSettings(settings);
+  // Goals
+  async getGoals() {
+    if (this.useAPI && this.userId) {
+      try {
+        return await apiService.getGoals(this.userId);
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    const key = this.getKey('goals');
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
   }
 
-  isPro() {
-    const settings = this.getUserSettings();
-    return settings.subscription === 'pro';
+  async saveGoal(goal) {
+    if (this.useAPI && this.userId) {
+      try {
+        if (goal.id) {
+          return await apiService.updateGoal(goal.id, {
+            title: goal.title,
+            description: goal.description || '',
+            target_amount: goal.target_amount.toString(),
+            current_amount: goal.current_amount.toString(),
+            deadline: goal.deadline || null,
+            status: goal.status || 'active',
+          });
+        } else {
+          return await apiService.createGoal(this.userId, {
+            title: goal.title,
+            description: goal.description || '',
+            target_amount: goal.target_amount.toString(),
+            current_amount: goal.current_amount || '0',
+            deadline: goal.deadline || null,
+            status: 'active',
+          });
+        }
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    // Fallback to localStorage
+    const goals = await this.getGoals();
+    if (goal.id) {
+      const index = goals.findIndex(g => g.id === goal.id);
+      if (index >= 0) goals[index] = goal;
+    } else {
+      goal.id = Date.now().toString();
+      goals.push(goal);
+    }
+    localStorage.setItem(this.getKey('goals'), JSON.stringify(goals));
+    return goal;
   }
 
-  // Budget management
-  updateBudgets(budgets) {
-    const settings = this.getUserSettings();
-    settings.budgets = budgets;
-    return this.saveUserSettings(settings);
+  async deleteGoal(id) {
+    if (this.useAPI) {
+      try {
+        await apiService.deleteGoal(id);
+        return;
+      } catch (error) {
+        console.warn('API unavailable, using localStorage', error);
+        this.useAPI = false;
+      }
+    }
+    const goals = await this.getGoals();
+    const filtered = goals.filter(g => g.id !== id);
+    localStorage.setItem(this.getKey('goals'), JSON.stringify(filtered));
   }
 }
 
